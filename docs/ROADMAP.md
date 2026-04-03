@@ -1,34 +1,56 @@
-\# 🚀 Alura - Journal de Bord
+\# 🚀 Alura - Journal de Bord (Version 2026.04.03)
 
 
 
-\## ✅ Étape 0 : Infrastructure (Terminé)
+\## ✅ Étape 0 : Infrastructure (Optimisée 🚀)
 
-\- PC : ASUS i5-13500H optimisé (16Go RAM prévus).
+\- \*\*Machine :\*\* ASUS i5-13500H (Upgrade 16Go RAM ✅).
 
-\- OS : Windows 11 (Mode Sombre) + Ubuntu (WSL) bridé à 6Go.
+\- \*\*OS :\*\* Windows 11 (Dark Mode) + Ubuntu (WSL) bridé à 6Go.
 
-\- Git : Initialisé et synchronisé avec GitHub (sghaiierriadh/Alura).
-
-
-
-\## 🛠️ Étape 1 : Comptes \& Outils (Terminé ✅)
-
-\- \[x] GitHub (sghaiierriadh)
-
-\- \[x] Cursor (Abonnement Pro)
-
-\- \[x] Supabase (Projet Alura-DB créé)
-
-\- \[x] Vercel (Compte lié à GitHub)
-
-\- \[x] Resend (Compte actif)
+\- \*\*Source Control :\*\* GitHub (sghaiierriadh/Alura) synchronisé.
 
 
 
-\## 🎯 Sprint 1 : Le "Cerveau" (À venir)
+\## ✅ Étape 1 : Écosystème Cloud (Provisionné)
 
-\- Définition du Blueprint (Standardisation du PDF).
+\- \[x] \*\*Cursor Pro :\*\* Installé et prêt pour le Vibe Coding.
 
-\- Rédaction du System Prompt (Personnalité d'Alura).
+\- \[x] \*\*Supabase :\*\* Base de données vectorielle configurée.
+
+\- \[x] \*\*Vercel :\*\* Déploiement CI/CD lié à GitHub.
+
+\- \[x] \*\*Resend :\*\* Service mail d'alerte configuré.
+
+
+
+\## 🎯 Sprint 1 : Le "Cerveau" \& Architecture (En cours 🕒)
+
+\- \[x] \*\*Blueprint Stratégique :\*\* Identité, Ton (Humain) et Logique d'escalade.
+
+\- \[ ] \*\*System Prompt "Master" :\*\* Traduction du Blueprint en instructions IA.
+
+\- \[ ] \*\*Initialisation Next.js :\*\* Squelette de l'application dans `/app`.
+
+\- \[ ] \*\*Setup Environnement :\*\* Configuration des fichiers `.env` sécurisés.
+
+
+
+\## 🏗️ Sprint 2 : Le "Magic Onboarding" (Le Dashboard)
+
+\- \[ ] \*\*Ingestion Hybride :\*\* Upload de documents (PDF/Word) + Formulaire dynamique.
+
+\- \[ ] \*\*Extraction IA :\*\* Pré-remplissage du formulaire via analyse automatique.
+
+\- \[ ] \*\*Sync Supabase :\*\* Stockage des connaissances clients.
+
+
+
+\## 🎨 Sprint 3 : Le Widget \& l'Expérience Client
+
+\- \[ ] \*\*Chat UI :\*\* Design moderne, invisible (pas d'aspect robotique).
+
+\- \[ ] \*\*Widget Embed :\*\* Génération du script JS pour intégration externe (Shopify, WP).
+
+\- \[ ] \*\*Workflow n8n/Resend :\*\* Alerte email/WhatsApp lors d'une escalade humaine.
 
