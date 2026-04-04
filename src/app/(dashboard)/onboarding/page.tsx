@@ -1,6 +1,18 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const MAGIC_MESSAGES = [
+  "🔍 Exploration de vos sources de données...",
+  "🧠 Extraction des points clés de votre activité...",
+  "🎭 Ajustement de la personnalité d'Alura...",
+] as const;
+
+const DEMO_COMPANY = {
+  name: "Pixelynks",
+  sector: "Agence Digitale",
+  description: "Expert en IA",
+} as const;
 
 function DocumentIcon({ className }: { className?: string }) {
   return (
@@ -42,9 +54,81 @@ function GlobeIcon({ className }: { className?: string }) {
   );
 }
 
+function MagicSpinner() {
+  return (
+    <div className="relative flex h-16 w-16 items-center justify-center">
+      <div
+        className="absolute inset-0 rounded-full bg-zinc-100/80 motion-safe:animate-pulse"
+        aria-hidden
+      />
+      <div
+        className="absolute inset-0 rounded-full border border-zinc-200/60 motion-safe:animate-ping motion-reduce:animate-none"
+        style={{ animationDuration: "2s" }}
+        aria-hidden
+      />
+      <div
+        className="relative h-11 w-11 rounded-full border-2 border-zinc-200 border-t-zinc-900 motion-safe:animate-spin motion-reduce:animate-none"
+        style={{ animationDuration: "1.1s" }}
+      />
+    </div>
+  );
+}
+
 export default function OnboardingPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [siteUrl, setSiteUrl] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  const [analysisSuccess, setAnalysisSuccess] = useState(false);
+  const [messageVisible, setMessageVisible] = useState(true);
+  const [companyName, setCompanyName] = useState("");
+  const [sector, setSector] = useState("");
+  const [description, setDescription] = useState("");
+
+  const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAnalyzing) return;
+    setMessageVisible(false);
+    const show = window.setTimeout(() => setMessageVisible(true), 45);
+    return () => clearTimeout(show);
+  }, [currentMessageIndex, isAnalyzing]);
+
+  const startMagicAnalysis = useCallback(() => {
+    if (isAnalyzing) return;
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+
+    setAnalysisSuccess(false);
+    setCompanyName("");
+    setSector("");
+    setDescription("");
+    setIsAnalyzing(true);
+    setCurrentMessageIndex(0);
+    setMessageVisible(true);
+
+    timersRef.current.push(
+      window.setTimeout(() => setCurrentMessageIndex(1), 2000),
+    );
+    timersRef.current.push(
+      window.setTimeout(() => setCurrentMessageIndex(2), 4000),
+    );
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setIsAnalyzing(false);
+        setAnalysisSuccess(true);
+        setCompanyName(DEMO_COMPANY.name);
+        setSector(DEMO_COMPANY.sector);
+        setDescription(DEMO_COMPANY.description);
+      }, 6000),
+    );
+  }, [isAnalyzing]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -92,92 +176,123 @@ export default function OnboardingPage() {
             <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
               Ingestion hybride
             </p>
-            <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-5">
-              <div className="flex flex-col">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-                    Option A
-                  </span>
-                  <span className="text-sm font-medium text-zinc-800">
-                    Fichier
-                  </span>
-                </div>
-                <input
-                  id="onboarding-document"
-                  type="file"
-                  accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                  className="sr-only"
-                />
-                <label
-                  htmlFor="onboarding-document"
-                  className="block flex-1 cursor-pointer"
+
+            {isAnalyzing ? (
+              <div
+                className="mt-4 flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-zinc-100 bg-gradient-to-b from-zinc-50/80 to-white px-6 py-12 transition-all duration-500 ease-out"
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <MagicSpinner />
+                <p
+                  className={`mt-8 max-w-md text-center text-sm font-medium leading-relaxed text-zinc-700 transition-opacity duration-500 ease-out motion-reduce:transition-none ${
+                    messageVisible ? "opacity-100" : "opacity-0"
+                  }`}
                 >
-                  <div
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    className={[
-                      "flex min-h-[168px] flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 transition-colors",
-                      isDragging
-                        ? "border-zinc-400 bg-zinc-50/90"
-                        : "border-zinc-200/90 bg-zinc-50/30 hover:border-zinc-300 hover:bg-zinc-50/50",
-                    ].join(" ")}
-                  >
-                    <DocumentIcon className="h-10 w-10 text-zinc-400" />
-                    <p className="mt-3 max-w-[220px] text-center text-sm font-medium leading-snug text-zinc-700">
-                      Glissez votre document ici
-                    </p>
-                    <p className="mt-1.5 text-center text-xs text-zinc-400">
-                      PDF, Word ou texte — ou cliquez pour parcourir
-                    </p>
-                  </div>
-                </label>
-                <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
-                  Conseil : un PDF de vos tarifs ou de votre FAQ est idéal pour
-                  une configuration rapide et fiable.
+                  {MAGIC_MESSAGES[currentMessageIndex]}
                 </p>
               </div>
-
-              <div className="flex flex-col">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-                    Option B
-                  </span>
-                  <span className="text-sm font-medium text-zinc-800">
-                    Site web
-                  </span>
-                </div>
-                <div className="flex min-h-[168px] flex-col rounded-xl border border-zinc-200/90 bg-zinc-50/30 px-4 py-5">
-                  <label htmlFor="site-url" className="sr-only">
-                    URL du site web
-                  </label>
-                  <div className="flex items-start gap-2">
-                    <GlobeIcon className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400" />
-                    <div className="min-w-0 flex-1">
-                      <input
-                        id="site-url"
-                        name="siteUrl"
-                        type="url"
-                        inputMode="url"
-                        autoComplete="url"
-                        placeholder="https://votre-site.com"
-                        value={siteUrl}
-                        onChange={(e) => setSiteUrl(e.target.value)}
-                        className="w-full border-0 border-b border-zinc-200/80 bg-transparent py-1.5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-0"
-                      />
-                      <p className="mt-3 text-xs leading-relaxed text-zinc-500">
-                        Nous analyserons les pages publiques utiles à votre
-                        activité (présentation, offre, contact).
+            ) : analysisSuccess ? (
+              <div className="mt-4 flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-emerald-100/80 bg-emerald-50/40 px-6 py-10 transition-all duration-500 ease-out">
+                <p className="text-center text-lg" aria-hidden>
+                  ✅
+                </p>
+                <p className="mt-3 text-center text-sm font-medium text-emerald-900">
+                  Analyse terminée avec succès !
+                </p>
+                <p className="mt-1.5 max-w-sm text-center text-xs leading-relaxed text-emerald-800/80">
+                  Le profil ci-dessous a été prérempli à partir de la simulation.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-5">
+                <div className="flex flex-col">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                      Option A
+                    </span>
+                    <span className="text-sm font-medium text-zinc-800">
+                      Fichier
+                    </span>
+                  </div>
+                  <input
+                    id="onboarding-document"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    className="sr-only"
+                  />
+                  <label
+                    htmlFor="onboarding-document"
+                    className="block flex-1 cursor-pointer"
+                  >
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={[
+                        "flex min-h-[168px] flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 transition-colors",
+                        isDragging
+                          ? "border-zinc-400 bg-zinc-50/90"
+                          : "border-zinc-200/90 bg-zinc-50/30 hover:border-zinc-300 hover:bg-zinc-50/50",
+                      ].join(" ")}
+                    >
+                      <DocumentIcon className="h-10 w-10 text-zinc-400" />
+                      <p className="mt-3 max-w-[220px] text-center text-sm font-medium leading-snug text-zinc-700">
+                        Glissez votre document ici
+                      </p>
+                      <p className="mt-1.5 text-center text-xs text-zinc-400">
+                        PDF, Word ou texte — ou cliquez pour parcourir
                       </p>
                     </div>
-                  </div>
+                  </label>
+                  <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
+                    Conseil : un PDF de vos tarifs ou de votre FAQ est idéal pour
+                    une configuration rapide et fiable.
+                  </p>
                 </div>
-                <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
-                  Conseil : privilégiez l’URL de votre page d’accueil ou de votre
-                  offre principale.
-                </p>
+
+                <div className="flex flex-col">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                      Option B
+                    </span>
+                    <span className="text-sm font-medium text-zinc-800">
+                      Site web
+                    </span>
+                  </div>
+                  <div className="flex min-h-[168px] flex-col rounded-xl border border-zinc-200/90 bg-zinc-50/30 px-4 py-5">
+                    <label htmlFor="site-url" className="sr-only">
+                      URL du site web
+                    </label>
+                    <div className="flex items-start gap-2">
+                      <GlobeIcon className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400" />
+                      <div className="min-w-0 flex-1">
+                        <input
+                          id="site-url"
+                          name="siteUrl"
+                          type="url"
+                          inputMode="url"
+                          autoComplete="url"
+                          placeholder="https://votre-site.com"
+                          value={siteUrl}
+                          onChange={(e) => setSiteUrl(e.target.value)}
+                          className="w-full border-0 border-b border-zinc-200/80 bg-transparent py-1.5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-0"
+                        />
+                        <p className="mt-3 text-xs leading-relaxed text-zinc-500">
+                          Nous analyserons les pages publiques utiles à votre
+                          activité (présentation, offre, contact).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
+                    Conseil : privilégiez l’URL de votre page d’accueil ou de
+                    votre offre principale.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <form
@@ -201,6 +316,7 @@ export default function OnboardingPage() {
                 readOnly
                 placeholder="Complété automatiquement après analyse"
                 aria-readonly="true"
+                value={companyName}
                 className="mt-1.5 w-full rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-600 placeholder:text-zinc-400/90 focus:border-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-200/60"
               />
             </div>
@@ -218,6 +334,7 @@ export default function OnboardingPage() {
                 readOnly
                 placeholder="Complété automatiquement après analyse"
                 aria-readonly="true"
+                value={sector}
                 className="mt-1.5 w-full rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-600 placeholder:text-zinc-400/90 focus:border-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-200/60"
               />
             </div>
@@ -235,25 +352,42 @@ export default function OnboardingPage() {
                 rows={4}
                 placeholder="Complété automatiquement après analyse"
                 aria-readonly="true"
+                value={description}
                 className="mt-1.5 w-full resize-none rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-3 py-2.5 text-sm text-zinc-600 placeholder:text-zinc-400/90 focus:border-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-200/60"
               />
             </div>
 
-            <div className="rounded-xl border border-dashed border-zinc-200/90 bg-zinc-50/40 px-4 py-8 sm:px-6">
+            <div
+              className={`rounded-xl border border-dashed px-4 py-8 transition-colors duration-500 sm:px-6 ${
+                analysisSuccess
+                  ? "border-emerald-200/80 bg-emerald-50/30"
+                  : "border-zinc-200/90 bg-zinc-50/40"
+              }`}
+            >
               <h2 className="text-center text-sm font-semibold tracking-tight text-zinc-800 sm:text-left">
                 Intelligence Extraite
               </h2>
-              <p className="mt-2 text-center text-sm leading-relaxed text-zinc-400 sm:text-left">
-                Les points clés de votre entreprise apparaîtront ici après
-                analyse.
-              </p>
+              {analysisSuccess ? (
+                <p className="mt-2 text-center text-sm leading-relaxed text-emerald-900/90 sm:text-left">
+                  Aperçu : {DEMO_COMPANY.name} — {DEMO_COMPANY.sector}. Les
+                  points clés issus de vos sources sont reflétés dans le profil
+                  ci-dessus.
+                </p>
+              ) : (
+                <p className="mt-2 text-center text-sm leading-relaxed text-zinc-400 sm:text-left">
+                  Les points clés de votre entreprise apparaîtront ici après
+                  analyse.
+                </p>
+              )}
             </div>
 
             <button
               type="button"
-              className="w-full rounded-xl bg-zinc-900 py-3.5 text-sm font-medium tracking-wide text-white transition-colors hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+              onClick={startMagicAnalysis}
+              disabled={isAnalyzing}
+              className="w-full rounded-xl bg-zinc-900 py-3.5 text-sm font-medium tracking-wide text-white transition-all hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Confirmer et Activer Alura
+              {isAnalyzing ? "Analyse en cours…" : "Confirmer et Activer Alura"}
             </button>
           </form>
         </div>
