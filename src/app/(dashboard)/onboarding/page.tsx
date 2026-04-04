@@ -1,18 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { analyzeDocument } from "@/app/actions/analyze-doc";
+import { useCallback, useEffect, useState } from "react";
 
 const MAGIC_MESSAGES = [
   "🔍 Exploration de vos sources de données...",
   "🧠 Extraction des points clés de votre activité...",
   "🎭 Ajustement de la personnalité d'Alura...",
 ] as const;
-
-const DEMO_COMPANY = {
-  name: "Pixelynks",
-  sector: "Agence Digitale",
-  description: "Expert en IA",
-} as const;
 
 function DocumentIcon({ className }: { className?: string }) {
   return (
@@ -77,6 +72,7 @@ function MagicSpinner() {
 export default function OnboardingPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [siteUrl, setSiteUrl] = useState("");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [analysisSuccess, setAnalysisSuccess] = useState(false);
@@ -84,14 +80,16 @@ export default function OnboardingPage() {
   const [companyName, setCompanyName] = useState("");
   const [sector, setSector] = useState("");
   const [description, setDescription] = useState("");
-
-  const timersRef = useRef<number[]>([]);
+  const [faqHighlights, setFaqHighlights] = useState<string[]>([]);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => {
-      timersRef.current.forEach(clearTimeout);
-    };
-  }, []);
+    if (!isAnalyzing) return;
+    const id = window.setInterval(() => {
+      setCurrentMessageIndex((i) => (i + 1) % MAGIC_MESSAGES.length);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [isAnalyzing]);
 
   useEffect(() => {
     if (!isAnalyzing) return;
@@ -100,35 +98,45 @@ export default function OnboardingPage() {
     return () => clearTimeout(show);
   }, [currentMessageIndex, isAnalyzing]);
 
-  const startMagicAnalysis = useCallback(() => {
+  const startMagicAnalysis = useCallback(async () => {
     if (isAnalyzing) return;
-    timersRef.current.forEach(clearTimeout);
-    timersRef.current = [];
+    if (!pdfFile) {
+      setAnalysisError("Veuillez d’abord sélectionner un fichier PDF.");
+      return;
+    }
 
+    setAnalysisError(null);
     setAnalysisSuccess(false);
     setCompanyName("");
     setSector("");
     setDescription("");
+    setFaqHighlights([]);
     setIsAnalyzing(true);
     setCurrentMessageIndex(0);
     setMessageVisible(true);
 
-    timersRef.current.push(
-      window.setTimeout(() => setCurrentMessageIndex(1), 2000),
-    );
-    timersRef.current.push(
-      window.setTimeout(() => setCurrentMessageIndex(2), 4000),
-    );
-    timersRef.current.push(
-      window.setTimeout(() => {
-        setIsAnalyzing(false);
+    const formData = new FormData();
+    formData.append("file", pdfFile);
+
+    try {
+      const result = await analyzeDocument(formData);
+      if (result.ok) {
+        setCompanyName(result.data.companyName);
+        setSector(result.data.sector);
+        setDescription(result.data.description);
+        setFaqHighlights(result.data.faqHighlights);
         setAnalysisSuccess(true);
-        setCompanyName(DEMO_COMPANY.name);
-        setSector(DEMO_COMPANY.sector);
-        setDescription(DEMO_COMPANY.description);
-      }, 6000),
-    );
-  }, [isAnalyzing]);
+      } else {
+        setAnalysisError(result.error);
+      }
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Une erreur est survenue lors de l’analyse.";
+      setAnalysisError(message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [isAnalyzing, pdfFile]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -146,6 +154,34 @@ export default function OnboardingPage() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    const ok =
+      f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
+    if (!ok) {
+      setAnalysisError("Veuillez déposer un fichier PDF.");
+      return;
+    }
+    setPdfFile(f);
+    setAnalysisError(null);
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) {
+      setPdfFile(null);
+      return;
+    }
+    const ok =
+      f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
+    if (!ok) {
+      setAnalysisError("Veuillez choisir un fichier PDF.");
+      e.target.value = "";
+      setPdfFile(null);
+      return;
+    }
+    setPdfFile(f);
+    setAnalysisError(null);
   }, []);
 
   return (
@@ -202,7 +238,8 @@ export default function OnboardingPage() {
                   Analyse terminée avec succès !
                 </p>
                 <p className="mt-1.5 max-w-sm text-center text-xs leading-relaxed text-emerald-800/80">
-                  Le profil ci-dessous a été prérempli à partir de la simulation.
+                  Le profil ci-dessous a été prérempli à partir de votre document
+                  PDF.
                 </p>
               </div>
             ) : (
@@ -213,14 +250,15 @@ export default function OnboardingPage() {
                       Option A
                     </span>
                     <span className="text-sm font-medium text-zinc-800">
-                      Fichier
+                      Fichier PDF
                     </span>
                   </div>
                   <input
                     id="onboarding-document"
                     type="file"
-                    accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    accept="application/pdf,.pdf"
                     className="sr-only"
+                    onChange={handleFileChange}
                   />
                   <label
                     htmlFor="onboarding-document"
@@ -239,11 +277,16 @@ export default function OnboardingPage() {
                     >
                       <DocumentIcon className="h-10 w-10 text-zinc-400" />
                       <p className="mt-3 max-w-[220px] text-center text-sm font-medium leading-snug text-zinc-700">
-                        Glissez votre document ici
+                        Glissez votre PDF ici
                       </p>
                       <p className="mt-1.5 text-center text-xs text-zinc-400">
-                        PDF, Word ou texte — ou cliquez pour parcourir
+                        ou cliquez pour parcourir
                       </p>
+                      {pdfFile ? (
+                        <p className="mt-3 max-w-full truncate px-2 text-center text-xs font-medium text-zinc-600">
+                          {pdfFile.name}
+                        </p>
+                      ) : null}
                     </div>
                   </label>
                   <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
@@ -294,6 +337,15 @@ export default function OnboardingPage() {
               </div>
             )}
           </div>
+
+          {analysisError ? (
+            <p
+              className="mt-6 rounded-lg border border-red-200 bg-red-50/80 px-3 py-2 text-sm text-red-800"
+              role="alert"
+            >
+              {analysisError}
+            </p>
+          ) : null}
 
           <form
             className="mt-10 space-y-5 border-t border-zinc-100 pt-10"
@@ -368,11 +420,24 @@ export default function OnboardingPage() {
                 Intelligence Extraite
               </h2>
               {analysisSuccess ? (
-                <p className="mt-2 text-center text-sm leading-relaxed text-emerald-900/90 sm:text-left">
-                  Aperçu : {DEMO_COMPANY.name} — {DEMO_COMPANY.sector}. Les
-                  points clés issus de vos sources sont reflétés dans le profil
-                  ci-dessus.
-                </p>
+                <div className="mt-3 space-y-3 text-sm leading-relaxed text-zinc-700">
+                  <p className="text-emerald-900/90">
+                    Points clés issus de votre FAQ (aperçu) :
+                  </p>
+                  <ul className="list-inside list-disc space-y-1.5 text-zinc-600">
+                    {faqHighlights
+                      .filter((line) => line.length > 0)
+                      .map((line, idx) => (
+                        <li key={`${idx}-${line.slice(0, 24)}`}>{line}</li>
+                      ))}
+                  </ul>
+                  {faqHighlights.every((l) => !l.length) ? (
+                    <p className="text-zinc-500">
+                      Aucun point FAQ distinct n’a été isolé ; le profil repose
+                      sur le nom, le secteur et la description ci-dessus.
+                    </p>
+                  ) : null}
+                </div>
               ) : (
                 <p className="mt-2 text-center text-sm leading-relaxed text-zinc-400 sm:text-left">
                   Les points clés de votre entreprise apparaîtront ici après
@@ -383,7 +448,7 @@ export default function OnboardingPage() {
 
             <button
               type="button"
-              onClick={startMagicAnalysis}
+              onClick={() => void startMagicAnalysis()}
               disabled={isAnalyzing}
               className="w-full rounded-xl bg-zinc-900 py-3.5 text-sm font-medium tracking-wide text-white transition-all hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
