@@ -1,56 +1,42 @@
-\# 🚀 Alura - Journal de Bord (Version 2026.04.03)
+✅ Étape 0 : Infrastructure (Optimisée 🚀)
+Machine : ASUS i5-13500H (Upgrade 16Go RAM ✅).
 
+OS : Windows 11 (Dark Mode) + Ubuntu (WSL) bridé à 6Go.
 
+Source Control : GitHub (sghaiierriadh/Alura) synchronisé.
 
-\## ✅ Étape 0 : Infrastructure (Optimisée 🚀)
+✅ Étape 1 : Écosystème Cloud (Provisionné)
+[x] Cursor Pro : Installé et prêt pour le Vibe Coding.
 
-\- \*\*Machine :\*\* ASUS i5-13500H (Upgrade 16Go RAM ✅).
+[x] Supabase : Base de données vectorielle configurée.
 
-\- \*\*OS :\*\* Windows 11 (Dark Mode) + Ubuntu (WSL) bridé à 6Go.
+[x] Vercel : Déploiement CI/CD lié à GitHub.
 
-\- \*\*Source Control :\*\* GitHub (sghaiierriadh/Alura) synchronisé.
+[x] Resend : Service mail d'alerte configuré.
 
+🎯 Sprint 1 : Le "Cerveau" & Architecture (Terminé ✅)
+[x] Blueprint Stratégique : Identité, Ton (Humain) et Logique d'escalade.
 
+[x] System Prompt "Master" : Traduction du Blueprint en instructions IA.
 
-\## ✅ Étape 1 : Écosystème Cloud (Provisionné)
+[x] Initialisation Next.js : Architecture Dashboard/Widget avec Next.js 16.
 
-\- \[x] \*\*Cursor Pro :\*\* Installé et prêt pour le Vibe Coding.
+[x] Setup Environnement : Fichiers .env.local et secrets API configurés.
 
-\- \[x] \*\*Supabase :\*\* Base de données vectorielle configurée.
+[x] Health Check : Validation du routage API et du serveur local.
 
-\- \[x] \*\*Vercel :\*\* Déploiement CI/CD lié à GitHub.
+🏗️ Sprint 2 : Le "Magic Onboarding" (En cours 🕒)
+[ ] Interface Onboarding : Formulaire de profil entreprise et design UI.
 
-\- \[x] \*\*Resend :\*\* Service mail d'alerte configuré.
+[ ] Ingestion Hybride : Upload de documents (PDF/Word) + Formulaire dynamique.
 
+[ ] Extraction IA : Pré-remplissage du formulaire via analyse automatique.
 
+[ ] Sync Supabase : Stockage des connaissances clients.
 
-\## 🎯 Sprint 1 : Le "Cerveau" \& Architecture (En cours 🕒)
+🎨 Sprint 3 : Le Widget & l'Expérience Client
+[ ] Chat UI : Design moderne, invisible (pas d'aspect robotique).
 
-\- \[x] \*\*Blueprint Stratégique :\*\* Identité, Ton (Humain) et Logique d'escalade.
+[ ] Widget Embed : Génération du script JS pour intégration externe (Shopify, WP).
 
-\- \[ ] \*\*System Prompt "Master" :\*\* Traduction du Blueprint en instructions IA.
-
-\- \[ ] \*\*Initialisation Next.js :\*\* Squelette de l'application dans `/app`.
-
-\- \[ ] \*\*Setup Environnement :\*\* Configuration des fichiers `.env` sécurisés.
-
-
-
-\## 🏗️ Sprint 2 : Le "Magic Onboarding" (Le Dashboard)
-
-\- \[ ] \*\*Ingestion Hybride :\*\* Upload de documents (PDF/Word) + Formulaire dynamique.
-
-\- \[ ] \*\*Extraction IA :\*\* Pré-remplissage du formulaire via analyse automatique.
-
-\- \[ ] \*\*Sync Supabase :\*\* Stockage des connaissances clients.
-
-
-
-\## 🎨 Sprint 3 : Le Widget \& l'Expérience Client
-
-\- \[ ] \*\*Chat UI :\*\* Design moderne, invisible (pas d'aspect robotique).
-
-\- \[ ] \*\*Widget Embed :\*\* Génération du script JS pour intégration externe (Shopify, WP).
-
-\- \[ ] \*\*Workflow n8n/Resend :\*\* Alerte email/WhatsApp lors d'une escalade humaine.
-
+[ ] Workflow n8n/Resend : Alerte email/WhatsApp lors d'une escalade humaine.
