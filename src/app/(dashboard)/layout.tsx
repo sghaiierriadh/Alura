@@ -27,6 +27,18 @@ export default function DashboardLayout({
             </Link>
             <Link
               className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-50"
+              href="/knowledge"
+            >
+              Connaissance
+            </Link>
+            <Link
+              className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-50"
+              href="/chat"
+            >
+              Chat
+            </Link>
+            <Link
+              className="text-zinc-600 underline-offset-4 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-50"
               href="/settings"
             >
               Paramètres
