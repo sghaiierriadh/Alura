@@ -3,24 +3,25 @@ import { cookies } from "next/headers";
 
 import type { Database } from "@/types/database.types";
 
-export async function createClient() {
-  const cookieStore = await cookies();
+export function createClient() {
+  const cookieStore = cookies();
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll();
+        async getAll() {
+          return (await cookieStore).getAll();
         },
-        setAll(cookiesToSet) {
+        async setAll(cookiesToSet, _headers) {
           try {
+            const store = await cookieStore;
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
+              store.set(name, value, options),
             );
           } catch {
-            // Called from a Server Component: ignore if cookies are read-only.
+            // Lecture seule : le middleware rafraîchit la session.
           }
         },
       },

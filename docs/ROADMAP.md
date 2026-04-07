@@ -1,42 +1,76 @@
 ✅ Étape 0 : Infrastructure (Optimisée 🚀)
-Machine : ASUS i5-13500H (Upgrade 16Go RAM ✅).
 
-OS : Windows 11 (Dark Mode) + Ubuntu (WSL) bridé à 6Go.
+\[x] Machine : ASUS i5-13500H (Upgrade 16Go RAM ✅).
 
-Source Control : GitHub (sghaiierriadh/Alura) synchronisé.
+\[x] OS : Windows 11 (Dark Mode) + Ubuntu (WSL) bridé à 6Go.
+
+\[x] Source Control : GitHub (sghaiierriadh/Alura) synchronisé.
+
+
 
 ✅ Étape 1 : Écosystème Cloud (Provisionné)
-[x] Cursor Pro : Installé et prêt pour le Vibe Coding.
 
-[x] Supabase : Base de données vectorielle configurée.
+\[x] Cursor Pro : Installé et prêt pour le Vibe Coding.
 
-[x] Vercel : Déploiement CI/CD lié à GitHub.
+\[x] Supabase : Base de données vectorielle configurée.
 
-[x] Resend : Service mail d'alerte configuré.
+\[x] Vercel : Déploiement CI/CD lié à GitHub.
 
-🎯 Sprint 1 : Le "Cerveau" & Architecture (Terminé ✅)
-[x] Blueprint Stratégique : Identité, Ton (Humain) et Logique d'escalade.
+\[x] Resend : Service mail d'alerte configuré.
 
-[x] System Prompt "Master" : Traduction du Blueprint en instructions IA.
 
-[x] Initialisation Next.js : Architecture Dashboard/Widget avec Next.js 16.
 
-[x] Setup Environnement : Fichiers .env.local et secrets API configurés.
+✅ Sprint 1 : Le "Cerveau" \& Architecture (Terminé)
 
-[x] Health Check : Validation du routage API et du serveur local.
+\[x] Blueprint Stratégique : Identité, Ton et Logique d'escalade.
 
-🏗️ Sprint 2 : Le "Magic Onboarding" (En cours 🕒)
-[ ] Interface Onboarding : Formulaire de profil entreprise et design UI.
+\[x] System Prompt "Master" : Instructions IA configurées.
 
-[ ] Ingestion Hybride : Upload de documents (PDF/Word) + Formulaire dynamique.
+\[x] Initialisation Next.js : Architecture Dashboard/Widget.
 
-[ ] Extraction IA : Pré-remplissage du formulaire via analyse automatique.
+\[x] Setup Environnement : .env.local et secrets API.
 
-[ ] Sync Supabase : Stockage des connaissances clients.
+\[x] Health Check : Validation du routage et serveur local.
 
-🎨 Sprint 3 : Le Widget & l'Expérience Client
-[ ] Chat UI : Design moderne, invisible (pas d'aspect robotique).
 
-[ ] Widget Embed : Génération du script JS pour intégration externe (Shopify, WP).
 
-[ ] Workflow n8n/Resend : Alerte email/WhatsApp lors d'une escalade humaine.
+✅ Sprint 2 : Le "Magic Onboarding" (Terminé 🏆)
+
+\[x] Interface Onboarding : Formulaire et design UI validés.
+
+\[x] Ingestion Hybride : Upload PDF + Scraping URL multi-pages.
+
+\[x] Extraction IA : Analyse automatique via Gemini 2.5 Flash.
+
+\[x] Sync Supabase : Sauvegarde sécurisée (POC bypass ok).
+
+
+
+🎯 Sprint 2.5 : Management de la Connaissance (En cours 🕒)
+
+\[ ] Page "Ma Connaissance" : Interface de visualisation des données.
+
+\[ ] Édition CRUD : Possibilité de modifier/ajouter/supprimer des FAQs.
+
+\[ ] Validation Finale : Bouton d'activation définitive de l'agent.
+
+
+
+🎨 Sprint 3 : Le Widget \& l'Expérience Chat
+
+\[ ] Chat UI : Design moderne et invisible.
+
+\[ ] Logique RAG : Branchement de la connaissance sur le chat.
+
+\[ ] Widget Embed : Script JS pour intégration externe.
+
+
+
+🚀 Sprint 4 : Business \& Analytics
+
+\[ ] Dashboard Client : Statistiques de conversation.
+
+\[ ] Workflow n8n/Resend : Alertes d'escalade humaine.
+
+\[ ] Go-Live : Mise en production finale.
+

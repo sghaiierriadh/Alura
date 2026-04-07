@@ -7,11 +7,45 @@ export type Json =
   | Json[];
 
 /**
- * Placeholder until `supabase gen types` is run against your project.
+ * Minimal types for RLS-backed tables. Regenerate with `supabase gen types` when the schema evolves.
  */
 export type Database = {
   public: {
-    Tables: Record<string, never>;
+    Tables: {
+      agents: {
+        Row: {
+          id: string;
+          user_id: string;
+          company_name: string | null;
+          sector: string | null;
+          description: string | null;
+          faq_data: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          company_name?: string | null;
+          sector?: string | null;
+          description?: string | null;
+          faq_data?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          company_name?: string | null;
+          sector?: string | null;
+          description?: string | null;
+          faq_data?: Json | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+    };
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: Record<string, never>;

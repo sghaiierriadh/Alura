@@ -1,12 +1,34 @@
 "use client";
 
 import { analyzeDocument } from "@/app/actions/analyze-doc";
-import { useCallback, useEffect, useState } from "react";
+import { analyzeWebsiteUrl } from "@/app/actions/analyze-url";
+import { saveAgent } from "@/app/actions/save-agent";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+
+function isValidWebUrl(raw: string): boolean {
+  const s = raw.trim();
+  if (!s) return false;
+  try {
+    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 const MAGIC_MESSAGES = [
   "🔍 Exploration de vos sources de données...",
   "🧠 Extraction des points clés de votre activité...",
   "🎭 Ajustement de la personnalité d'Alura...",
+] as const;
+
+const URL_MAGIC_MESSAGES = [
+  "Exploration du site…",
+  "Lecture des pages clés (FAQ, services, offres)…",
+  "Analyse par Alura…",
 ] as const;
 
 function DocumentIcon({ className }: { className?: string }) {
@@ -49,6 +71,15 @@ function GlobeIcon({ className }: { className?: string }) {
   );
 }
 
+function SaveSpinner({ className }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white border-t-transparent motion-reduce:animate-none ${className ?? ""}`}
+      aria-hidden
+    />
+  );
+}
+
 function MagicSpinner() {
   return (
     <div className="relative flex h-16 w-16 items-center justify-center">
@@ -70,26 +101,39 @@ function MagicSpinner() {
 }
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [isDragging, setIsDragging] = useState(false);
   const [siteUrl, setSiteUrl] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState<string[]>([
+    ...MAGIC_MESSAGES,
+  ]);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-  const [analysisSuccess, setAnalysisSuccess] = useState(false);
+  const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [analysisKind, setAnalysisKind] = useState<"url" | "pdf" | null>(null);
+  const [lastSource, setLastSource] = useState<"pdf" | "url" | null>(null);
+  const reduceMotion = useReducedMotion();
+
+  const urlReady = useMemo(
+    () => isValidWebUrl(siteUrl),
+    [siteUrl],
+  );
   const [messageVisible, setMessageVisible] = useState(true);
   const [companyName, setCompanyName] = useState("");
   const [sector, setSector] = useState("");
   const [description, setDescription] = useState("");
   const [faqHighlights, setFaqHighlights] = useState<string[]>([]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!isAnalyzing) return;
     const id = window.setInterval(() => {
-      setCurrentMessageIndex((i) => (i + 1) % MAGIC_MESSAGES.length);
+      setCurrentMessageIndex((i) => (i + 1) % loadingMessages.length);
     }, 2000);
     return () => clearInterval(id);
-  }, [isAnalyzing]);
+  }, [isAnalyzing, loadingMessages.length]);
 
   useEffect(() => {
     if (!isAnalyzing) return;
@@ -100,34 +144,57 @@ export default function OnboardingPage() {
 
   const startMagicAnalysis = useCallback(async () => {
     if (isAnalyzing) return;
-    if (!pdfFile) {
-      setAnalysisError("Veuillez d’abord sélectionner un fichier PDF.");
+
+    const urlTrim = siteUrl.trim();
+    const useUrl = urlTrim.length > 0;
+
+    if (!useUrl && !pdfFile) {
+      setAnalysisError("Veuillez renseigner une URL ou sélectionner un fichier PDF.");
       return;
     }
 
     setAnalysisError(null);
-    setAnalysisSuccess(false);
+    setAnalysisComplete(false);
     setCompanyName("");
     setSector("");
     setDescription("");
     setFaqHighlights([]);
+    setLastSource(null);
     setIsAnalyzing(true);
+    setAnalysisKind(useUrl ? "url" : "pdf");
     setCurrentMessageIndex(0);
     setMessageVisible(true);
-
-    const formData = new FormData();
-    formData.append("file", pdfFile);
+    setLoadingMessages(
+      useUrl ? [...URL_MAGIC_MESSAGES] : [...MAGIC_MESSAGES],
+    );
 
     try {
-      const result = await analyzeDocument(formData);
-      if (result.ok) {
-        setCompanyName(result.data.companyName);
-        setSector(result.data.sector);
-        setDescription(result.data.description);
-        setFaqHighlights(result.data.faqHighlights);
-        setAnalysisSuccess(true);
+      if (useUrl) {
+        const result = await analyzeWebsiteUrl(urlTrim);
+        if (result.ok) {
+          setCompanyName(result.data.companyName);
+          setSector(result.data.sector);
+          setDescription(result.data.description);
+          setFaqHighlights(result.data.faqHighlights);
+          setAnalysisComplete(true);
+          setLastSource("url");
+        } else {
+          setAnalysisError(result.error);
+        }
       } else {
-        setAnalysisError(result.error);
+        const formData = new FormData();
+        formData.append("file", pdfFile!);
+        const result = await analyzeDocument(formData);
+        if (result.ok) {
+          setCompanyName(result.data.companyName);
+          setSector(result.data.sector);
+          setDescription(result.data.description);
+          setFaqHighlights(result.data.faqHighlights);
+          setAnalysisComplete(true);
+          setLastSource("pdf");
+        } else {
+          setAnalysisError(result.error);
+        }
       }
     } catch (e) {
       const message =
@@ -135,8 +202,34 @@ export default function OnboardingPage() {
       setAnalysisError(message);
     } finally {
       setIsAnalyzing(false);
+      setAnalysisKind(null);
     }
-  }, [isAnalyzing, pdfFile]);
+  }, [isAnalyzing, pdfFile, siteUrl]);
+
+  const handleConfirmActivate = useCallback(async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const result = await saveAgent({
+        companyName,
+        sector,
+        description,
+        faqHighlights,
+      });
+      if (result.ok) {
+        toast.success("Alura est maintenant activée !");
+        router.push("/dashboard");
+      } else {
+        toast.error(result.error);
+      }
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Une erreur est survenue lors de l’enregistrement.";
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [companyName, description, faqHighlights, isSaving, router, sector]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -213,7 +306,7 @@ export default function OnboardingPage() {
               Ingestion hybride
             </p>
 
-            {isAnalyzing ? (
+            {isAnalyzing && analysisKind === "pdf" ? (
               <div
                 className="mt-4 flex min-h-[280px] flex-col items-center justify-center rounded-2xl border border-zinc-100 bg-gradient-to-b from-zinc-50/80 to-white px-6 py-12 transition-all duration-500 ease-out"
                 role="status"
@@ -226,10 +319,10 @@ export default function OnboardingPage() {
                     messageVisible ? "opacity-100" : "opacity-0"
                   }`}
                 >
-                  {MAGIC_MESSAGES[currentMessageIndex]}
+                  {loadingMessages[currentMessageIndex] ?? ""}
                 </p>
               </div>
-            ) : analysisSuccess ? (
+            ) : analysisComplete ? (
               <div className="mt-4 flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-emerald-100/80 bg-emerald-50/40 px-6 py-10 transition-all duration-500 ease-out">
                 <p className="text-center text-lg" aria-hidden>
                   ✅
@@ -238,105 +331,198 @@ export default function OnboardingPage() {
                   Analyse terminée avec succès !
                 </p>
                 <p className="mt-1.5 max-w-sm text-center text-xs leading-relaxed text-emerald-800/80">
-                  Le profil ci-dessous a été prérempli à partir de votre document
-                  PDF.
+                  {lastSource === "url"
+                    ? "Le profil ci-dessous a été prérempli à partir de votre site web."
+                    : "Le profil ci-dessous a été prérempli à partir de votre document PDF."}
                 </p>
               </div>
             ) : (
-              <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-5">
-                <div className="flex flex-col">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-                      Option A
-                    </span>
-                    <span className="text-sm font-medium text-zinc-800">
-                      Fichier PDF
-                    </span>
-                  </div>
-                  <input
-                    id="onboarding-document"
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="sr-only"
-                    onChange={handleFileChange}
-                  />
-                  <label
-                    htmlFor="onboarding-document"
-                    className="block flex-1 cursor-pointer"
-                  >
-                    <div
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                      className={[
-                        "flex min-h-[168px] flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 transition-colors",
-                        isDragging
-                          ? "border-zinc-400 bg-zinc-50/90"
-                          : "border-zinc-200/90 bg-zinc-50/30 hover:border-zinc-300 hover:bg-zinc-50/50",
-                      ].join(" ")}
-                    >
-                      <DocumentIcon className="h-10 w-10 text-zinc-400" />
-                      <p className="mt-3 max-w-[220px] text-center text-sm font-medium leading-snug text-zinc-700">
-                        Glissez votre PDF ici
-                      </p>
-                      <p className="mt-1.5 text-center text-xs text-zinc-400">
-                        ou cliquez pour parcourir
-                      </p>
-                      {pdfFile ? (
-                        <p className="mt-3 max-w-full truncate px-2 text-center text-xs font-medium text-zinc-600">
-                          {pdfFile.name}
-                        </p>
-                      ) : null}
+              <>
+                <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-5">
+                  <div className="flex flex-col">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                        Option A
+                      </span>
+                      <span className="text-sm font-medium text-zinc-800">
+                        Fichier PDF
+                      </span>
                     </div>
-                  </label>
-                  <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
-                    Conseil : un PDF de vos tarifs ou de votre FAQ est idéal pour
-                    une configuration rapide et fiable.
-                  </p>
+                    <input
+                      id="onboarding-document"
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      className="sr-only"
+                      onChange={handleFileChange}
+                      disabled={isAnalyzing && analysisKind === "url"}
+                    />
+                    <label
+                      htmlFor="onboarding-document"
+                      className={`block flex-1 ${isAnalyzing && analysisKind === "url" ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
+                    >
+                      <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        className={[
+                          "flex min-h-[168px] flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 transition-colors",
+                          isDragging
+                            ? "border-zinc-400 bg-zinc-50/90"
+                            : "border-zinc-200/90 bg-zinc-50/30 hover:border-zinc-300 hover:bg-zinc-50/50",
+                        ].join(" ")}
+                      >
+                        <DocumentIcon className="h-10 w-10 text-zinc-400" />
+                        <p className="mt-3 max-w-[220px] text-center text-sm font-medium leading-snug text-zinc-700">
+                          Glissez votre PDF ici
+                        </p>
+                        <p className="mt-1.5 text-center text-xs text-zinc-400">
+                          ou cliquez pour parcourir
+                        </p>
+                        {pdfFile ? (
+                          <p className="mt-3 max-w-full truncate px-2 text-center text-xs font-medium text-zinc-600">
+                            {pdfFile.name}
+                          </p>
+                        ) : null}
+                      </div>
+                    </label>
+                    <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
+                      Conseil : un PDF de vos tarifs ou de votre FAQ est idéal pour
+                      une configuration rapide et fiable.
+                    </p>
+                  </div>
+
+                  <div className="relative flex flex-col">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
+                        Option B
+                      </span>
+                      <span className="text-sm font-medium text-zinc-800">
+                        Site web
+                      </span>
+                    </div>
+                    <motion.div
+                      className="relative flex min-h-[168px] flex-col overflow-hidden rounded-xl bg-zinc-50/30 px-4 py-5"
+                      animate={
+                        isAnalyzing && analysisKind === "url"
+                          ? reduceMotion
+                            ? {
+                                borderColor: "rgba(82, 82, 91, 0.65)",
+                                boxShadow: "0 0 0 2px rgba(63, 63, 70, 0.4)",
+                              }
+                            : {
+                                borderColor: [
+                                  "rgba(228, 228, 231, 0.95)",
+                                  "rgba(82, 82, 91, 0.75)",
+                                  "rgba(228, 228, 231, 0.95)",
+                                ],
+                                boxShadow: [
+                                  "0 0 0 1px rgba(228, 228, 231, 0.8)",
+                                  "0 0 0 2px rgba(63, 63, 70, 0.35)",
+                                  "0 0 0 1px rgba(228, 228, 231, 0.8)",
+                                ],
+                              }
+                          : {
+                              borderColor: urlReady
+                                ? "rgba(167, 243, 208, 0.85)"
+                                : "rgba(228, 228, 231, 0.9)",
+                              boxShadow: "0 0 0 1px rgba(228, 228, 231, 0.5)",
+                            }
+                      }
+                      transition={
+                        isAnalyzing && analysisKind === "url" && !reduceMotion
+                          ? { duration: 1.85, repeat: Infinity, ease: "easeInOut" }
+                          : { duration: 0.35, ease: [0.22, 1, 0.36, 1] }
+                      }
+                      style={{ borderWidth: 1, borderStyle: "solid" }}
+                    >
+                      <AnimatePresence mode="wait">
+                        {urlReady && !isAnalyzing ? (
+                          <motion.span
+                            key="ready"
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -4 }}
+                            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                            className="absolute right-3 top-3 rounded-full border border-emerald-200/90 bg-emerald-50/95 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 shadow-sm"
+                          >
+                            URL Prête
+                          </motion.span>
+                        ) : null}
+                      </AnimatePresence>
+                      <label htmlFor="site-url" className="sr-only">
+                        URL du site web
+                      </label>
+                      <div className="flex items-start gap-2">
+                        <GlobeIcon className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400" />
+                        <div className="min-w-0 flex-1">
+                          <input
+                            id="site-url"
+                            name="siteUrl"
+                            type="url"
+                            inputMode="url"
+                            autoComplete="url"
+                            placeholder="https://votre-site.com"
+                            value={siteUrl}
+                            onChange={(e) => setSiteUrl(e.target.value)}
+                            readOnly={isAnalyzing && analysisKind === "url"}
+                            aria-invalid={siteUrl.trim().length > 0 && !urlReady}
+                            className="w-full border-0 border-b border-zinc-200/80 bg-transparent py-1.5 pr-24 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-0"
+                          />
+                          <p className="mt-3 text-xs leading-relaxed text-zinc-500">
+                            Nous analyserons les pages publiques utiles à votre
+                            activité (présentation, offre, contact).
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                    <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
+                      Conseil : privilégiez l’URL de votre page d’accueil ou de
+                      votre offre principale.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex flex-col">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-                      Option B
-                    </span>
-                    <span className="text-sm font-medium text-zinc-800">
-                      Site web
-                    </span>
+                {isAnalyzing && analysisKind === "url" ? (
+                  <div
+                    className="mt-6 flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-zinc-100 bg-gradient-to-b from-zinc-50/80 to-white px-6 py-10"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                  >
+                    <MagicSpinner />
+                    <p
+                      className={`mt-8 max-w-md text-center text-sm font-medium leading-relaxed text-zinc-700 transition-opacity duration-500 ease-out motion-reduce:transition-none ${
+                        messageVisible ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      {loadingMessages[currentMessageIndex] ?? ""}
+                    </p>
                   </div>
-                  <div className="flex min-h-[168px] flex-col rounded-xl border border-zinc-200/90 bg-zinc-50/30 px-4 py-5">
-                    <label htmlFor="site-url" className="sr-only">
-                      URL du site web
-                    </label>
-                    <div className="flex items-start gap-2">
-                      <GlobeIcon className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400" />
-                      <div className="min-w-0 flex-1">
-                        <input
-                          id="site-url"
-                          name="siteUrl"
-                          type="url"
-                          inputMode="url"
-                          autoComplete="url"
-                          placeholder="https://votre-site.com"
-                          value={siteUrl}
-                          onChange={(e) => setSiteUrl(e.target.value)}
-                          className="w-full border-0 border-b border-zinc-200/80 bg-transparent py-1.5 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-0"
-                        />
-                        <p className="mt-3 text-xs leading-relaxed text-zinc-500">
-                          Nous analyserons les pages publiques utiles à votre
-                          activité (présentation, offre, contact).
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
-                    Conseil : privilégiez l’URL de votre page d’accueil ou de
-                    votre offre principale.
-                  </p>
-                </div>
-              </div>
+                ) : null}
+              </>
             )}
           </div>
+
+          <AnimatePresence mode="wait">
+            {!analysisComplete ? (
+              <motion.div
+                key="analyze-cta"
+                initial={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="mt-8"
+              >
+                <button
+                  type="button"
+                  onClick={() => void startMagicAnalysis()}
+                  disabled={isAnalyzing || isSaving}
+                  className="w-full rounded-xl bg-zinc-900 py-3.5 text-sm font-medium tracking-wide text-white transition-all hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isAnalyzing ? "Analyse en cours…" : "Analyser les données"}
+                </button>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
           {analysisError ? (
             <p
@@ -348,7 +534,7 @@ export default function OnboardingPage() {
           ) : null}
 
           <form
-            className="mt-10 space-y-5 border-t border-zinc-100 pt-10"
+            className="mt-10 space-y-5 border-t border-zinc-100 pt-10 pb-8 sm:pb-10"
             onSubmit={(e) => e.preventDefault()}
           >
             <p className="text-xs font-medium uppercase tracking-wider text-zinc-400">
@@ -411,7 +597,7 @@ export default function OnboardingPage() {
 
             <div
               className={`rounded-xl border border-dashed px-4 py-8 transition-colors duration-500 sm:px-6 ${
-                analysisSuccess
+                analysisComplete
                   ? "border-emerald-200/80 bg-emerald-50/30"
                   : "border-zinc-200/90 bg-zinc-50/40"
               }`}
@@ -419,8 +605,13 @@ export default function OnboardingPage() {
               <h2 className="text-center text-sm font-semibold tracking-tight text-zinc-800 sm:text-left">
                 Intelligence Extraite
               </h2>
-              {analysisSuccess ? (
-                <div className="mt-3 space-y-3 text-sm leading-relaxed text-zinc-700">
+              {analysisComplete ? (
+                <motion.div
+                  initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: 0.08 }}
+                  className="mt-3 space-y-3 text-sm leading-relaxed text-zinc-700"
+                >
                   <p className="text-emerald-900/90">
                     Points clés issus de votre FAQ (aperçu) :
                   </p>
@@ -437,7 +628,7 @@ export default function OnboardingPage() {
                       sur le nom, le secteur et la description ci-dessus.
                     </p>
                   ) : null}
-                </div>
+                </motion.div>
               ) : (
                 <p className="mt-2 text-center text-sm leading-relaxed text-zinc-400 sm:text-left">
                   Les points clés de votre entreprise apparaîtront ici après
@@ -446,14 +637,35 @@ export default function OnboardingPage() {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => void startMagicAnalysis()}
-              disabled={isAnalyzing}
-              className="w-full rounded-xl bg-zinc-900 py-3.5 text-sm font-medium tracking-wide text-white transition-all hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isAnalyzing ? "Analyse en cours…" : "Confirmer et Activer Alura"}
-            </button>
+            <AnimatePresence mode="wait">
+              {analysisComplete ? (
+                <motion.div
+                  key="confirm-cta"
+                  initial={reduceMotion ? false : { opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="pb-2 pt-2 sm:pb-4"
+                >
+                  <button
+                    type="button"
+                    onClick={() => void handleConfirmActivate()}
+                    disabled={isSaving}
+                    aria-busy={isSaving}
+                    className="flex w-full min-h-[52px] items-center justify-center gap-2 rounded-xl bg-black py-3.5 text-sm font-semibold tracking-wide text-white shadow-[0_8px_30px_rgb(0,0,0,0.18)] transition-all hover:bg-zinc-900 hover:shadow-[0_12px_36px_rgb(0,0,0,0.22)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 enabled:active:scale-[0.99] motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {isSaving ? (
+                      <>
+                        <SaveSpinner />
+                        <span>Création de votre agent…</span>
+                      </>
+                    ) : (
+                      "Confirmer et Activer Alura"
+                    )}
+                  </button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </form>
         </div>
       </div>
