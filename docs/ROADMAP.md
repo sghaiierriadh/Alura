@@ -1,76 +1,48 @@
-✅ Étape 0 : Infrastructure (Optimisée 🚀)
+# Roadmap Alura
 
-\[x] Machine : ASUS i5-13500H (Upgrade 16Go RAM ✅).
+## V0 - Termine
 
-\[x] OS : Windows 11 (Dark Mode) + Ubuntu (WSL) bridé à 6Go.
+### Sprint 1 - Cerveau & fondations
 
-\[x] Source Control : GitHub (sghaiierriadh/Alura) synchronisé.
+- [x] Blueprint produit (identite, ton, escalade)
+- [x] Setup Next.js App Router (dashboard + API)
+- [x] Setup Supabase + variables d'environnement
+- [x] Base Gemini operationnelle
 
+### Sprint 2 - Magic Onboarding
 
+- [x] UI onboarding (Option A PDF / Option B URL)
+- [x] Extraction intelligente via Gemini 2.5 Flash
+- [x] Scraping URL multi-pages (home + pages strategiques)
+- [x] Persistance `public.agents` avec `upsert` par `user_id`
 
-✅ Étape 1 : Écosystème Cloud (Provisionné)
+### Sprint 2.5 - Knowledge & Chat
 
-\[x] Cursor Pro : Installé et prêt pour le Vibe Coding.
+- [x] Page `knowledge` avec visualisation des donnees agent
+- [x] CRUD `faq_data` (ajout, edition, suppression)
+- [x] Route `/api/chat` RAG + streaming Gemini
+- [x] UI chat complete (historique, stream progressif, auto-scroll)
 
-\[x] Supabase : Base de données vectorielle configurée.
+## V1 - Objectifs
 
-\[x] Vercel : Déploiement CI/CD lié à GitHub.
+### 1) Intelligence
 
-\[x] Resend : Service mail d'alerte configuré.
+- [ ] Re-ranking des connaissances (priorisation FAQ la plus pertinente)
+- [ ] Detection d'intention (vente, SAV, information, escalade)
+- [ ] Reponses plus structurees (citations internes, confiance, resumés)
+- [ ] Evaluation qualite (latence, precision, taux de fallback)
 
+### 2) Escalade
 
+- [ ] Trigger d'escalade configurable (inconnu, frustration, urgence)
+- [ ] Collecte guidee des coordonnees (email/telephone/contexte)
+- [ ] Relay humain (ticketing/CRM/webhook)
+- [ ] Journal d'escalade consultable dans le dashboard
 
-✅ Sprint 1 : Le "Cerveau" \& Architecture (Terminé)
+### 3) Widget
 
-\[x] Blueprint Stratégique : Identité, Ton et Logique d'escalade.
-
-\[x] System Prompt "Master" : Instructions IA configurées.
-
-\[x] Initialisation Next.js : Architecture Dashboard/Widget.
-
-\[x] Setup Environnement : .env.local et secrets API.
-
-\[x] Health Check : Validation du routage et serveur local.
-
-
-
-✅ Sprint 2 : Le "Magic Onboarding" (Terminé 🏆)
-
-\[x] Interface Onboarding : Formulaire et design UI validés.
-
-\[x] Ingestion Hybride : Upload PDF + Scraping URL multi-pages.
-
-\[x] Extraction IA : Analyse automatique via Gemini 2.5 Flash.
-
-\[x] Sync Supabase : Sauvegarde sécurisée (POC bypass ok).
-
-
-
-🎯 Sprint 2.5 : Management de la Connaissance (En cours 🕒)
-
-\[ ] Page "Ma Connaissance" : Interface de visualisation des données.
-
-\[ ] Édition CRUD : Possibilité de modifier/ajouter/supprimer des FAQs.
-
-\[ ] Validation Finale : Bouton d'activation définitive de l'agent.
-
-
-
-🎨 Sprint 3 : Le Widget \& l'Expérience Chat
-
-\[ ] Chat UI : Design moderne et invisible.
-
-\[ ] Logique RAG : Branchement de la connaissance sur le chat.
-
-\[ ] Widget Embed : Script JS pour intégration externe.
-
-
-
-🚀 Sprint 4 : Business \& Analytics
-
-\[ ] Dashboard Client : Statistiques de conversation.
-
-\[ ] Workflow n8n/Resend : Alertes d'escalade humaine.
-
-\[ ] Go-Live : Mise en production finale.
+- [ ] Widget embeddable (script simple + config publique)
+- [ ] Theming par client (couleurs, logo, tonalite)
+- [ ] Parametrage comportemental (welcome, limites, horaires)
+- [ ] Hardening production (auth, quotas, observabilite, anti-abus)
 

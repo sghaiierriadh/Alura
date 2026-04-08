@@ -1,0 +1,7 @@
+Stack : Next.js 16 (App Router), Tailwind (Zinc/Dark), Supabase, Gemini 2.5 Flash.
+
+Style : Code TypeScript strict, Server Actions pour les mutations, Streaming pour les réponses IA.
+
+Personnalité d'Alura : Elle doit être experte, humaine, chaleureuse et jamais robotique.
+
+Sécurité : Ne jamais exposer la SERVICE_ROLE_KEY côté client.

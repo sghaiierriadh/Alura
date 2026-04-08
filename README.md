@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Alura - Conseiller client intelligent
 
-## Getting Started
+Alura est une plateforme qui transforme les contenus d'une entreprise (PDF, site web, FAQ) en un conseiller conversationnel utile, humain et aligné avec la marque.
 
-First, run the development server:
+V0 couvre :
+- Onboarding intelligent (PDF + URL multi-pages)
+- Extraction et structuration des connaissances via Gemini
+- Sauvegarde dans Supabase
+- Edition de la base de connaissance
+- Chat RAG en streaming
+
+## Pitch
+
+Alura aide les equipes a deployer un conseiller client specialise en quelques minutes, sans pipeline ML complexe :
+- ingestion des contenus metier,
+- synthese automatique des informations clefs,
+- base de connaissance editable,
+- reponses contextuelles et escalade humaine quand necessaire.
+
+## Stack technique
+
+- Frontend: Next.js App Router (TypeScript, React 19)
+- UI: Tailwind CSS, Framer Motion, Sonner, Lucide
+- IA: Gemini (`gemini-2.5-flash`) via `@google/generative-ai`
+- Data: Supabase (Postgres + JSONB + RLS)
+- Parsing: `pdf-parse`, `cheerio`
+- Runtime: Node.js 18+
+
+## Demarrage rapide
+
+### 1) Prerequis
+
+- Node.js 18+
+- Un projet Supabase
+- Une cle Gemini
+
+### 2) Installation
+
+```bash
+npm install
+```
+
+### 3) Variables d'environnement
+
+Creer ou completer `.env.local` :
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.5-flash
+
+# Option POC (sans session utilisateur)
+POC_SAVE_AGENT_USER_ID=...
+```
+
+### 4) Lancer le projet
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Puis ouvrir `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Routes principales
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/onboarding` : ingestion PDF/URL + activation de l'agent
+- `/knowledge` : edition CRUD de `faq_data`
+- `/chat` : interface conversationnelle en streaming
+- `POST /api/chat` : endpoint RAG (agent + historique + stream Gemini)
 
-## Learn More
+## Documentation
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `docs/ARCHITECTURE.md` : flux RAG de bout en bout
+- `docs/ROADMAP.md` : progression V0 et objectifs V1
