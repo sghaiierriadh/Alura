@@ -45,6 +45,63 @@ export type Database = {
         };
         Relationships: [];
       };
+      leads: {
+        Row: {
+          id: string;
+          agent_id: string;
+          email: string | null;
+          phone: string | null;
+          full_name: string | null;
+          last_question: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          email?: string | null;
+          phone?: string | null;
+          full_name?: string | null;
+          last_question?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          email?: string | null;
+          phone?: string | null;
+          full_name?: string | null;
+          last_question?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      messages: {
+        Row: {
+          id: string;
+          session_id: string;
+          agent_id: string;
+          role: string;
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          agent_id: string;
+          role: string;
+          content: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          agent_id?: string;
+          role?: string;
+          content?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
