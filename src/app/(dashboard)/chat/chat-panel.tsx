@@ -16,6 +16,12 @@ export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const LEAD_FOLLOW_UP_MESSAGE =
   "C'est noté, j'ai transmis votre demande. Avez-vous une autre question ou une précision à ajouter avant que nous ne clôturions cet échange ?";
+function buildDynamicGreeting(companyName: string): string {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Bonjour" : hour >= 18 ? "Bonsoir" : "Salut";
+  const partner = companyName.trim() || "votre partenaire";
+  return `${greeting}, je suis Alura, en charge de vos réclamations, problèmes ou demandes chez ${partner}. Comment puis-je vous aider ?`;
+}
 
 function chatSessionStorageKey(id: string) {
   return `alura.chat.session.${id}`;
@@ -59,7 +65,7 @@ type Props = {
 };
 
 export function ChatPanel({ agentId, companyName }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<Array<ChatMessage & { uiOnly?: boolean }>>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   /** Identifiant lead Supabase — seule preuve fiable d’une capture réussie. */
@@ -70,6 +76,14 @@ export function ChatPanel({ agentId, companyName }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const leadFullyCaptured = Boolean(storedLeadId?.trim());
+
+  useEffect(() => {
+    if (messages.length > 0) return;
+    console.log("[Alura chat client] Greeting...");
+    setMessages([
+      { role: "assistant", content: buildDynamicGreeting(companyName), uiOnly: true },
+    ]);
+  }, [companyName, messages.length]);
 
   useEffect(() => {
     try {
@@ -119,6 +133,33 @@ export function ChatPanel({ agentId, companyName }: Props) {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  const isWeakQuestion = useCallback((text: string | null): boolean => {
+    if (!text) return true;
+    const t = text.trim();
+    if (t.length < 12) return true;
+    const tokens = t.split(/\s+/);
+    if (tokens.length <= 2) return true;
+    return !/[?]/.test(t) && t.length < 20;
+  }, []);
+
+  const getBestComplaintFromHistory = useCallback(
+    (current?: string): { lastQuestion: string | null; previousQuestion: string | null } => {
+      const users = messages.filter((m) => m.role === "user").map((m) => m.content.trim());
+      const currentText = (current ?? "").trim();
+      const all = currentText ? [...users, currentText] : users;
+      const last = all.length > 0 ? all[all.length - 1] : null;
+      const previous = all.length > 1 ? all[all.length - 2] : null;
+      if (!isWeakQuestion(last)) return { lastQuestion: last, previousQuestion: previous };
+      for (let i = all.length - 2; i >= 0; i -= 1) {
+        if (!isWeakQuestion(all[i])) {
+          return { lastQuestion: all[i], previousQuestion: previous };
+        }
+      }
+      return { lastQuestion: last, previousQuestion: previous };
+    },
+    [isWeakQuestion, messages],
+  );
+
   const handleLeadSubmitted = useCallback(
     (payload: {
       email: string;
@@ -126,26 +167,36 @@ export function ChatPanel({ agentId, companyName }: Props) {
       fullName: string;
       leadId: string;
     }) => {
-      if (sessionId) {
+      const lid = payload.leadId.trim();
+      setStoredLeadId(lid);
+
+      const resolvedSessionId =
+        sessionId ??
+        (typeof window !== "undefined"
+          ? sessionStorage.getItem(chatSessionStorageKey(agentId))
+          : null);
+
+      if (resolvedSessionId) {
         try {
-          sessionStorage.setItem(chatLeadStorageKey(agentId, sessionId), "1");
+          sessionStorage.setItem(chatLeadStorageKey(agentId, resolvedSessionId), "1");
           sessionStorage.setItem(
-            chatLeadContactKey(agentId, sessionId),
+            chatLeadContactKey(agentId, resolvedSessionId),
             JSON.stringify({
               email: payload.email,
               phone: payload.phone,
               fullName: payload.fullName,
             }),
           );
-          sessionStorage.setItem(
-            chatLeadIdKey(agentId, sessionId),
-            payload.leadId,
-          );
+          sessionStorage.setItem(chatLeadIdKey(agentId, resolvedSessionId), lid);
+          console.log("[Alura Debug] Persisting leadId (state + sessionStorage)", {
+            leadId: lid,
+            sessionId: resolvedSessionId,
+          });
         } catch {
           /* ignore */
         }
         void saveMessage({
-          sessionId,
+          sessionId: resolvedSessionId,
           agentId,
           role: "assistant",
           content: LEAD_FOLLOW_UP_MESSAGE,
@@ -154,10 +205,14 @@ export function ChatPanel({ agentId, companyName }: Props) {
             console.warn("[chat] saveMessage follow-up:", r.error);
           }
         });
+      } else {
+        console.warn(
+          "[Alura Debug] captureLead OK mais sessionId introuvable — leadId non écrit en sessionStorage",
+          { leadId: lid },
+        );
       }
       const prenom = payload.fullName.trim().split(/\s+/)[0];
       if (prenom) setVisitorFirstName(prenom);
-      setStoredLeadId(payload.leadId);
       setLeadTriggerActive(false);
       setMessages((prev) => [
         ...prev,
@@ -174,10 +229,12 @@ export function ChatPanel({ agentId, companyName }: Props) {
     setInput("");
     setLeadTriggerActive(false);
 
-    const priorForApi = messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const priorForApi = messages
+      .filter((m) => !m.uiOnly)
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
     setMessages((prev) => [
       ...prev,
@@ -198,10 +255,34 @@ export function ChatPanel({ agentId, companyName }: Props) {
     };
 
     try {
+      let effectiveLeadId = storedLeadId?.trim() ?? "";
+      if (typeof window !== "undefined" && sessionId) {
+        const fromStore =
+          sessionStorage.getItem(chatLeadIdKey(agentId, sessionId))?.trim() ?? "";
+        if (fromStore && fromStore !== effectiveLeadId) {
+          effectiveLeadId = fromStore;
+          setStoredLeadId(fromStore);
+        }
+      }
+
+      const leadCapturedFromStorage =
+        typeof window !== "undefined" &&
+        Boolean(sessionId) &&
+        sessionStorage.getItem(chatLeadStorageKey(agentId, sessionId)) === "1";
+      const leadCapturedForApi =
+        leadFullyCaptured || (leadCapturedFromStorage && Boolean(effectiveLeadId));
+
       console.log("[Alura chat client] Saving User Message... (server, before Gemini)", {
         sessionId,
         agentId,
       });
+      console.log("[Alura Debug] Sending leadId:", effectiveLeadId || "(empty)");
+      if (leadCapturedForApi && !effectiveLeadId) {
+        console.warn(
+          "[Alura Debug] Lead déjà capturé (flag/session) mais leadId vide — requête sans ticket",
+        );
+      }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -211,9 +292,9 @@ export function ChatPanel({ agentId, companyName }: Props) {
           message: text,
           messages: priorForApi,
           sessionId,
-          leadCapturedThisSession: leadFullyCaptured,
+          leadCapturedThisSession: leadCapturedForApi,
           userFirstName: visitorFirstName ?? "",
-          leadId: storedLeadId?.trim() ?? "",
+          leadId: effectiveLeadId,
         }),
       });
 
@@ -225,7 +306,7 @@ export function ChatPanel({ agentId, companyName }: Props) {
         } catch {
           /* ignore */
         }
-        removeEmptyAssistantBubble();
+        setMessages((prev) => prev.slice(0, -2));
         setInput(text);
         toast.error(errMsg);
         return;
@@ -235,7 +316,7 @@ export function ChatPanel({ agentId, companyName }: Props) {
 
       const reader = res.body?.getReader();
       if (!reader) {
-        removeEmptyAssistantBubble();
+        setMessages((prev) => prev.slice(0, -2));
         setInput(text);
         toast.error("Réponse vide du serveur.");
         return;
@@ -266,7 +347,7 @@ export function ChatPanel({ agentId, companyName }: Props) {
       });
       setLeadTriggerActive(hadTrigger && !leadFullyCaptured);
     } catch (e) {
-      removeEmptyAssistantBubble();
+      setMessages((prev) => prev.slice(0, -2));
       setInput(text);
       const msg = e instanceof Error ? e.message : "Échec de l’envoi.";
       toast.error(msg);
@@ -397,7 +478,8 @@ export function ChatPanel({ agentId, companyName }: Props) {
               <div className="w-full max-w-[85%]">
                 <LeadForm
                   agentId={agentId}
-                  lastQuestion={getLastUserQuestion()}
+                  lastQuestion={getBestComplaintFromHistory().lastQuestion}
+                  previousQuestion={getBestComplaintFromHistory().previousQuestion}
                   onSubmitted={handleLeadSubmitted}
                 />
               </div>

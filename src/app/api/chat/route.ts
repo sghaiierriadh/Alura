@@ -1,4 +1,4 @@
-import { updateLeadComplaint } from "@/app/actions/capture-lead";
+import { addLeadComplaint } from "@/app/actions/capture-lead";
 import { saveMessage } from "@/app/actions/save-message";
 import { fetchAgentByIdForChat } from "@/lib/agents/fetch-agent-chat";
 import { buildAluraSystemInstruction } from "@/lib/ai/alura-chat-prompt";
@@ -19,13 +19,45 @@ const FALLBACK_MODEL = "gemini-1.5-flash";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+function isWeakQuestion(text: string | null): boolean {
+  if (!text) return true;
+  const cleaned = text.trim();
+  if (cleaned.length < 12) return true;
+  const tokens = cleaned.split(/\s+/);
+  if (tokens.length <= 2) return true;
+  return !/[?]/.test(cleaned) && cleaned.length < 20;
+}
+
+function deriveComplaintQuestion(
+  history: ChatMessage[] | undefined,
+  current: string,
+): { lastQuestion: string | null; previousQuestion: string | null } {
+  const users = (history ?? [])
+    .filter((m) => m.role === "user")
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+  const all = [...users, current.trim()].filter(Boolean);
+  const last = all.length > 0 ? all[all.length - 1] : null;
+  const previous = all.length > 1 ? all[all.length - 2] : null;
+  if (!isWeakQuestion(last)) return { lastQuestion: last, previousQuestion: previous };
+  for (let i = all.length - 2; i >= 0; i -= 1) {
+    if (!isWeakQuestion(all[i])) {
+      return { lastQuestion: all[i], previousQuestion: previous };
+    }
+  }
+  return { lastQuestion: last, previousQuestion: previous };
+}
+
 function toGeminiHistory(messages: ChatMessage[] | undefined): Content[] {
   if (!messages?.length) return [];
   const out: Content[] = [];
+  let hasSeenUser = false;
   for (const m of messages) {
     const text = typeof m.content === "string" ? m.content.trim() : "";
     if (!text) continue;
     if (m.role !== "user" && m.role !== "assistant") continue;
+    if (!hasSeenUser && m.role === "assistant") continue;
+    if (m.role === "user") hasSeenUser = true;
     out.push({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text }],
@@ -261,27 +293,35 @@ export async function POST(req: Request) {
           }
         }
 
-        if (
-          leadCapturedThisSession &&
-          leadIdForComplaint.length > 0 &&
-          hasLeadFormTrigger(accumulated)
-        ) {
-          console.log("[api/chat] Updating Lead...", {
+        if (leadIdForComplaint.length > 0) {
+          const complaint = deriveComplaintQuestion(body.messages, message);
+          console.log("[api/chat] addLeadComplaint (await) — déclenché car leadId présent", {
             agentId,
             leadId: leadIdForComplaint,
-            lastQuestionPreview: message.slice(0, 120),
+            sessionId,
+            leadCapturedThisSession,
+            hadTrigger: hasLeadFormTrigger(accumulated),
+            lastQuestionPreview: (complaint.lastQuestion ?? "").slice(0, 120),
           });
-          const upd = await updateLeadComplaint({
+          const upd = await addLeadComplaint({
             agentId,
             leadId: leadIdForComplaint,
-            lastQuestion: message,
+            lastQuestion: complaint.lastQuestion,
+            previousQuestion: complaint.previousQuestion,
           });
-          if (upd.ok) {
-            console.log("[api/chat] Updating Lead... success", {
-              leadId: leadIdForComplaint,
-            });
-          } else {
-            console.error("[api/chat] Updating Lead... error", upd.error);
+          if (!upd.ok) {
+            console.error(
+              "[api/chat] addLeadComplaint Supabase / RLS — erreur:",
+              upd.error,
+            );
+          } else if (!upd.skipped && upd.complaintText) {
+            console.log(
+              `TICKET CREATED FOR LEAD ${leadIdForComplaint}: ${upd.complaintText}`,
+            );
+          } else if (upd.skipped) {
+            console.log(
+              "[api/chat] addLeadComplaint skipped (pas d'intention / message trop court)",
+            );
           }
         }
 

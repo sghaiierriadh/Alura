@@ -7,6 +7,7 @@ import { useState, useTransition, type FormEvent } from "react";
 type Props = {
   agentId: string;
   lastQuestion: string | null;
+  previousQuestion?: string | null;
   onSubmitted?: (payload: {
     email: string;
     phone: string;
@@ -15,7 +16,12 @@ type Props = {
   }) => void;
 };
 
-export function LeadForm({ agentId, lastQuestion, onSubmitted }: Props) {
+export function LeadForm({
+  agentId,
+  lastQuestion,
+  previousQuestion,
+  onSubmitted,
+}: Props) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -41,6 +47,7 @@ export function LeadForm({ agentId, lastQuestion, onSubmitted }: Props) {
         email,
         phone,
         lastQuestion,
+        previousQuestion,
       });
 
       if (!result.ok) {

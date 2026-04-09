@@ -75,6 +75,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      lead_complaints: {
+        Row: {
+          id: string;
+          lead_id: string;
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          content: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          lead_id?: string;
+          content?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       messages: {
         Row: {
           id: string;

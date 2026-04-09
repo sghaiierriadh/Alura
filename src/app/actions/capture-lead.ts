@@ -11,10 +11,15 @@ export type CaptureLeadInput = {
   phone?: string | null;
   fullName?: string | null;
   lastQuestion?: string | null;
+  previousQuestion?: string | null;
 };
 
 export type CaptureLeadResult =
   | { ok: true; leadId: string }
+  | { ok: false; error: string };
+
+export type AddLeadComplaintResult =
+  | { ok: true; leadId: string; complaintId?: string; complaintText?: string; skipped?: boolean }
   | { ok: false; error: string };
 
 function getPocUserId(): string | null {
@@ -32,12 +37,53 @@ function normalizeOptional(value?: string | null): string | null {
   return v.length > 0 ? v : null;
 }
 
+function looksLikeWeakQuestion(text: string | null): boolean {
+  if (!text) return true;
+  const cleaned = text.trim();
+  if (cleaned.length < 12) return true;
+  const tokens = cleaned.split(/\s+/);
+  if (tokens.length <= 2) return true;
+  return !/[?]/.test(cleaned) && cleaned.length < 20;
+}
+
+function resolveComplaintText(
+  lastQuestion: string | null,
+  previousQuestion: string | null,
+): string | null {
+  if (!looksLikeWeakQuestion(lastQuestion)) return lastQuestion;
+  if (!looksLikeWeakQuestion(previousQuestion)) return previousQuestion;
+  return lastQuestion ?? previousQuestion;
+}
+
+function isMeaningfulComplaint(text: string | null): text is string {
+  if (!text) return false;
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized.length < 8) return false;
+  const trivial = new Set([
+    "ok",
+    "okay",
+    "merci",
+    "thanks",
+    "thx",
+    "super",
+    "d'accord",
+    "dak",
+    "c bon",
+  ]);
+  if (trivial.has(normalized)) return false;
+  return !looksLikeWeakQuestion(normalized);
+}
+
 export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadResult> {
   const agentId = normalizeOptional(input.agentId);
   const email = normalizeOptional(input.email);
   const phone = normalizeOptional(input.phone);
   const fullName = normalizeOptional(input.fullName);
-  const lastQuestion = normalizeOptional(input.lastQuestion);
+  const lastQuestion = resolveComplaintText(
+    normalizeOptional(input.lastQuestion),
+    normalizeOptional(input.previousQuestion),
+  );
 
   if (!agentId) {
     return { ok: false, error: "agentId requis." };
@@ -82,6 +128,16 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
       return { ok: false, error: error?.message ?? "Insertion lead échouée." };
     }
 
+    if (isMeaningfulComplaint(lastQuestion)) {
+      const { error: complaintErr } = await admin.from("lead_complaints").insert({
+        lead_id: inserted.id,
+        content: lastQuestion,
+      });
+      if (complaintErr) {
+        return { ok: false, error: complaintErr.message };
+      }
+    }
+
     return { ok: true, leadId: inserted.id };
   }
 
@@ -122,27 +178,44 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     return { ok: false, error: error?.message ?? "Insertion lead échouée." };
   }
 
+  if (isMeaningfulComplaint(lastQuestion)) {
+    const { error: complaintErr } = await supabase.from("lead_complaints").insert({
+      lead_id: inserted.id,
+      content: lastQuestion,
+    });
+    if (complaintErr) {
+      return { ok: false, error: complaintErr.message };
+    }
+  }
+
   return { ok: true, leadId: inserted.id };
 }
 
-export type UpdateLeadComplaintInput = {
+export type AddLeadComplaintInput = {
   agentId: string;
   leadId: string;
   lastQuestion: string | null;
+  previousQuestion?: string | null;
 };
 
-export async function updateLeadComplaint(
-  input: UpdateLeadComplaintInput,
-): Promise<CaptureLeadResult> {
+export async function addLeadComplaint(
+  input: AddLeadComplaintInput,
+): Promise<AddLeadComplaintResult> {
   const agentId = normalizeOptional(input.agentId);
   const leadId = normalizeOptional(input.leadId);
-  const lastQuestion = normalizeOptional(input.lastQuestion);
+  const lastQuestion = resolveComplaintText(
+    normalizeOptional(input.lastQuestion),
+    normalizeOptional(input.previousQuestion),
+  );
 
   if (!agentId) {
     return { ok: false, error: "agentId requis." };
   }
   if (!leadId) {
     return { ok: false, error: "leadId requis." };
+  }
+  if (!isMeaningfulComplaint(lastQuestion)) {
+    return { ok: true, leadId, skipped: true };
   }
 
   const pocUserId = getPocUserId();
@@ -176,17 +249,28 @@ export async function updateLeadComplaint(
       return { ok: false, error: "Agent introuvable." };
     }
 
-    const { error: upErr } = await admin
-      .from("leads")
-      .update({ last_question: lastQuestion })
-      .eq("id", leadId)
-      .eq("agent_id", agentId);
+    const { data: insertedComplaint, error: insertErr } = await admin
+      .from("lead_complaints")
+      .insert({ lead_id: leadId, content: lastQuestion })
+      .select("id")
+      .single();
 
-    if (upErr) {
-      return { ok: false, error: upErr.message };
+    if (insertErr) {
+      console.error("[capture-lead] addLeadComplaint insert (service role) failed:", {
+        message: insertErr.message,
+        code: insertErr.code,
+        details: insertErr.details,
+        hint: insertErr.hint,
+      });
+      return { ok: false, error: insertErr.message };
     }
 
-    return { ok: true, leadId };
+    return {
+      ok: true,
+      leadId,
+      complaintId: insertedComplaint?.id,
+      complaintText: lastQuestion,
+    };
   }
 
   const supabase = createClient();
@@ -221,15 +305,26 @@ export async function updateLeadComplaint(
     return { ok: false, error: "Lead introuvable." };
   }
 
-  const { error: upErr } = await supabase
-    .from("leads")
-    .update({ last_question: lastQuestion })
-    .eq("id", leadId)
-    .eq("agent_id", agentId);
+  const { data: insertedComplaint, error: insertErr } = await supabase
+    .from("lead_complaints")
+    .insert({ lead_id: leadId, content: lastQuestion })
+    .select("id")
+    .single();
 
-  if (upErr) {
-    return { ok: false, error: upErr.message };
+  if (insertErr) {
+    console.error("[capture-lead] addLeadComplaint insert (session) failed:", {
+      message: insertErr.message,
+      code: insertErr.code,
+      details: insertErr.details,
+      hint: insertErr.hint,
+    });
+    return { ok: false, error: insertErr.message };
   }
 
-  return { ok: true, leadId };
+  return {
+    ok: true,
+    leadId,
+    complaintId: insertedComplaint?.id,
+    complaintText: lastQuestion,
+  };
 }
