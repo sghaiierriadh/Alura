@@ -4,6 +4,8 @@ export default function WidgetLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className="min-h-full bg-zinc-100 dark:bg-zinc-900">{children}</div>
+    <div className="m-0 box-border flex h-dvh max-h-dvh w-full flex-col overflow-hidden p-0">
+      {children}
+    </div>
   );
 }

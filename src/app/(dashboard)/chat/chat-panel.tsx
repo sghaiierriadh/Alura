@@ -62,9 +62,11 @@ function ChatMarkdown({
 type Props = {
   agentId: string;
   companyName: string;
+  /** Widget / iframe : hauteur contrainte, scroll interne, pas de min-height dashboard. */
+  layout?: "default" | "embedded";
 };
 
-export function ChatPanel({ agentId, companyName }: Props) {
+export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
   const [messages, setMessages] = useState<Array<ChatMessage & { uiOnly?: boolean }>>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -123,15 +125,29 @@ export function ChatPanel({ agentId, companyName }: Props) {
     return null;
   }, [messages]);
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    const behavior = isStreaming ? "auto" : "smooth";
+    scrollToBottom(behavior);
+  }, [messages, isStreaming, leadTriggerActive, scrollToBottom]);
+
+  useEffect(() => {
+    const run = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => scrollToBottom("auto"));
+      });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") run();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [scrollToBottom]);
 
   const isWeakQuestion = useCallback((text: string | null): boolean => {
     if (!text) return true;
@@ -398,9 +414,23 @@ export function ChatPanel({ agentId, companyName }: Props) {
   const canSend =
     input.trim().length > 0 && !isStreaming && Boolean(sessionId);
 
+  const isEmbedded = layout === "embedded";
+
   return (
-    <div className="flex min-h-[min(720px,calc(100vh-8rem))] flex-col overflow-hidden rounded-2xl bg-zinc-950 shadow-xl ring-1 ring-zinc-800/80">
-      <header className="shrink-0 border-b border-zinc-800/90 px-5 py-4">
+    <div
+      className={
+        isEmbedded
+          ? "flex h-full min-h-0 w-full max-h-full flex-1 flex-col overflow-hidden bg-zinc-950"
+          : "flex min-h-[min(720px,calc(100vh-8rem))] flex-col overflow-hidden rounded-2xl bg-zinc-950 shadow-xl ring-1 ring-zinc-800/80"
+      }
+    >
+      <header
+        className={
+          isEmbedded
+            ? "shrink-0 border-b border-zinc-800/90 px-3 py-3"
+            : "shrink-0 border-b border-zinc-800/90 px-5 py-4"
+        }
+      >
         <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
           Conversation
         </p>
@@ -423,7 +453,11 @@ export function ChatPanel({ agentId, companyName }: Props) {
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
+        className={
+          isEmbedded
+            ? "min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3"
+            : "min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6"
+        }
       >
         {messages.length === 0 ? (
           <p className="text-center text-sm text-zinc-500">
@@ -488,7 +522,13 @@ export function ChatPanel({ agentId, companyName }: Props) {
         </AnimatePresence>
       </div>
 
-      <div className="shrink-0 border-t border-zinc-800/90 p-4 sm:p-5">
+      <div
+        className={
+          isEmbedded
+            ? "shrink-0 border-t border-zinc-800/90 bg-zinc-950 p-3"
+            : "shrink-0 border-t border-zinc-800/90 p-4 sm:p-5"
+        }
+      >
         <div className="flex items-end gap-2 rounded-xl bg-zinc-900/80 p-2 ring-1 ring-zinc-800/80 focus-within:ring-zinc-600/50">
           <textarea
             rows={1}
