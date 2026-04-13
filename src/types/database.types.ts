@@ -7,7 +7,9 @@ export type Json =
   | Json[];
 
 /**
- * Minimal types for RLS-backed tables. Regenerate with `supabase gen types` when the schema evolves.
+ * Types alignés sur le schéma Supabase public (à régénérer avec `supabase gen types typescript --linked`).
+ * Colonnes récentes : `leads.session_id`, `leads.source`, `lead_complaints.status`,
+ * `lead_complaints.priority` (low | normal | high), `lead_complaints.resolution_notes`.
  */
 export type Database = {
   public: {
@@ -53,6 +55,9 @@ export type Database = {
           phone: string | null;
           full_name: string | null;
           last_question: string | null;
+          session_id: string | null;
+          /** Peut être null sur d’anciennes lignes avant remplissage côté base */
+          source: string | null;
           created_at: string;
         };
         Insert: {
@@ -62,6 +67,8 @@ export type Database = {
           phone?: string | null;
           full_name?: string | null;
           last_question?: string | null;
+          session_id?: string | null;
+          source?: string;
           created_at?: string;
         };
         Update: {
@@ -71,6 +78,8 @@ export type Database = {
           phone?: string | null;
           full_name?: string | null;
           last_question?: string | null;
+          session_id?: string | null;
+          source?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -80,18 +89,27 @@ export type Database = {
           id: string;
           lead_id: string;
           content: string;
+          status: string;
+          resolution_notes: string | null;
+          priority: string;
           created_at: string;
         };
         Insert: {
           id?: string;
           lead_id: string;
           content: string;
+          status?: string;
+          resolution_notes?: string | null;
+          priority?: string;
           created_at?: string;
         };
         Update: {
           id?: string;
           lead_id?: string;
           content?: string;
+          status?: string;
+          resolution_notes?: string | null;
+          priority?: string;
           created_at?: string;
         };
         Relationships: [];

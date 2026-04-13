@@ -512,6 +512,8 @@ export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
               <div className="w-full max-w-[85%]">
                 <LeadForm
                   agentId={agentId}
+                  sessionId={sessionId}
+                  source={isEmbedded ? "widget" : "dashboard"}
                   lastQuestion={getBestComplaintFromHistory().lastQuestion}
                   previousQuestion={getBestComplaintFromHistory().previousQuestion}
                   onSubmitted={handleLeadSubmitted}

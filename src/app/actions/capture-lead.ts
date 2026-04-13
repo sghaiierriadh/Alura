@@ -12,6 +12,10 @@ export type CaptureLeadInput = {
   fullName?: string | null;
   lastQuestion?: string | null;
   previousQuestion?: string | null;
+  /** Session chat (messages) — pour lier le lead à la discussion côté admin */
+  sessionId?: string | null;
+  /** Origine du lead : widget, embed, dashboard, api, unknown */
+  source?: string | null;
 };
 
 export type CaptureLeadResult =
@@ -35,6 +39,20 @@ function getPocUserId(): string | null {
 function normalizeOptional(value?: string | null): string | null {
   const v = value?.trim() ?? "";
   return v.length > 0 ? v : null;
+}
+
+const LEAD_SOURCES = new Set(["widget", "embed", "dashboard", "api", "unknown"]);
+
+/**
+ * Valeur stockée en base (snake_case / minuscules). Défaut **widget** si non fourni (nouveaux leads).
+ */
+function normalizeLeadSource(value?: string | null): string {
+  const raw = value?.trim() ?? "";
+  if (!raw) return "widget";
+  const v = raw.toLowerCase();
+  if (LEAD_SOURCES.has(v)) return v;
+  if (v === "chat" || v === "app") return "dashboard";
+  return "unknown";
 }
 
 function looksLikeWeakQuestion(text: string | null): boolean {
@@ -84,6 +102,8 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     normalizeOptional(input.lastQuestion),
     normalizeOptional(input.previousQuestion),
   );
+  const sessionIdChat = normalizeOptional(input.sessionId);
+  const leadSource = normalizeLeadSource(input.source);
 
   if (!agentId) {
     return { ok: false, error: "agentId requis." };
@@ -120,6 +140,8 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
         phone,
         full_name: fullName,
         last_question: lastQuestion,
+        session_id: sessionIdChat,
+        source: leadSource,
       })
       .select("id")
       .single();
@@ -132,6 +154,8 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
       const { error: complaintErr } = await admin.from("lead_complaints").insert({
         lead_id: inserted.id,
         content: lastQuestion,
+        status: "open",
+        priority: "normal",
       });
       if (complaintErr) {
         return { ok: false, error: complaintErr.message };
@@ -170,6 +194,8 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
       phone,
       full_name: fullName,
       last_question: lastQuestion,
+      session_id: sessionIdChat,
+      source: leadSource,
     })
     .select("id")
     .single();
@@ -182,6 +208,8 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     const { error: complaintErr } = await supabase.from("lead_complaints").insert({
       lead_id: inserted.id,
       content: lastQuestion,
+      status: "open",
+      priority: "normal",
     });
     if (complaintErr) {
       return { ok: false, error: complaintErr.message };
@@ -251,7 +279,12 @@ export async function addLeadComplaint(
 
     const { data: insertedComplaint, error: insertErr } = await admin
       .from("lead_complaints")
-      .insert({ lead_id: leadId, content: lastQuestion })
+      .insert({
+        lead_id: leadId,
+        content: lastQuestion,
+        status: "open",
+        priority: "normal",
+      })
       .select("id")
       .single();
 
@@ -307,7 +340,12 @@ export async function addLeadComplaint(
 
   const { data: insertedComplaint, error: insertErr } = await supabase
     .from("lead_complaints")
-    .insert({ lead_id: leadId, content: lastQuestion })
+    .insert({
+      lead_id: leadId,
+      content: lastQuestion,
+      status: "open",
+      priority: "normal",
+    })
     .select("id")
     .single();
 

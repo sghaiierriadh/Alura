@@ -1,5 +1,21 @@
 import type { NextConfig } from "next";
 
+/**
+ * Origines autorisées à intégrer `/widget` ou `/embed` en iframe (CSP `frame-ancestors`).
+ * Exemple : `'self' https://club-priveleges.example https://autre-partenaire.example`
+ * ou `*` pour autoriser tout hôte parent (widget exportable maximal).
+ */
+const widgetFrameAncestors = process.env.WIDGET_CSP_FRAME_ANCESTORS?.trim() || "*";
+
+const widgetSecurityHeaders = [
+  {
+    key: "Content-Security-Policy",
+    value: `frame-ancestors ${widgetFrameAncestors};`,
+  },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+];
+
 const nextConfig: NextConfig = {
   /* Ne pas créer de dossier vide `app/` à la racine : Next le résout avant `src/app`. */
   serverExternalPackages: ["pdf-parse"],
@@ -8,6 +24,18 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "12mb",
     },
+  },
+  async headers() {
+    return [
+      {
+        source: "/widget",
+        headers: widgetSecurityHeaders,
+      },
+      {
+        source: "/embed",
+        headers: widgetSecurityHeaders,
+      },
+    ];
   },
 };
 

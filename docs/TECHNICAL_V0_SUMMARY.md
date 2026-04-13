@@ -37,7 +37,57 @@ Source: `src/types/database.types.ts`
 - `created_at?: string`
 - `updated_at?: string`
 
-## 2) Structure JSONB `faq_data`
+## 2) Schema `public.leads` et `public.lead_complaints` (multi-tickets)
+
+### `leads`
+
+- Row: `id`, `agent_id`, `email`, `phone`, `full_name`, `last_question`, `created_at`
+- Une ligne par soumission du formulaire de capture (coordonnees + derniere question utile).
+
+### `lead_complaints`
+
+- Row: `id`, `lead_id`, `content`, `created_at`
+- **Plusieurs lignes possibles pour le meme `lead_id`**: chaque insertion represente un ticket / une reclamation associee au lead.
+- Premiere insertion souvent lors de `captureLead` si le texte de reclamation est juge significatif.
+- Insertions ulterieures via `addLeadComplaint` (appele depuis `/api/chat` quand le client envoie un `leadId` et qu'une nouvelle question utilisateur est traitee).
+
+**Schéma SQL de reference** (aligné sur `src/types/database.types.ts`; types exacts en base Supabase a verifier lors des migrations) :
+
+```sql
+-- Plusieurs tickets par lead (relation 1-N)
+CREATE TABLE public.lead_complaints (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id uuid NOT NULL REFERENCES public.leads (id) ON DELETE CASCADE,
+  content text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX lead_complaints_lead_id_idx ON public.lead_complaints (lead_id);
+```
+
+## 3) Schema `public.messages`
+
+- Row: `id`, `session_id`, `agent_id`, `role`, `content`, `created_at`
+- Ecriture **canonique des tours de conversation** via `POST /api/chat` (`src/app/api/chat/route.ts`), qui enchaine l'action serveur `saveMessage` (`src/app/actions/save-message.ts`) pour le message **user** avant Gemini et pour la reponse **assistant** apres fin de stream (texte sans marqueur lead). Ne pas s'appuyer sur un historique « uniquement client » comme source de verite.
+- Exception mineure: message assistant de suivi post-capture (`ChatPanel` → Server Action `saveMessage` pour le texte fixe de confirmation), toujours persiste en base serveur.
+
+**Schéma SQL de reference** :
+
+```sql
+CREATE TABLE public.messages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id uuid NOT NULL,
+  agent_id uuid NOT NULL REFERENCES public.agents (id) ON DELETE CASCADE,
+  role text NOT NULL CHECK (role IN ('user', 'assistant')),
+  content text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX messages_session_id_idx ON public.messages (session_id);
+CREATE INDEX messages_agent_id_idx ON public.messages (agent_id);
+```
+
+## 4) Structure JSONB `faq_data`
 
 ### Format canonique d'ecriture
 
@@ -72,7 +122,7 @@ Normalise en:
 ]
 ```
 
-## 3) Server Actions - Edition des connaissances
+## 5) Server Actions - Edition des connaissances
 
 Source: `src/app/actions/update-knowledge.ts`
 
@@ -108,37 +158,60 @@ Source: `src/app/actions/update-knowledge.ts`
 - `replaceKnowledgeFaq(items)`
   - remplace completement le tableau apres nettoyage `.trim()`
 
-## 4) Logique API `/api/chat` et construction du prompt
+## 6) Actions `saveMessage`, `captureLead`, `addLeadComplaint`
+
+### `saveMessage`
+
+- Input: `{ sessionId, agentId, role: "user" | "assistant", content }`
+- Insert dans `messages` (verification que l'agent appartient au user ou au POC).
+
+### `captureLead`
+
+- Input: `agentId`, coordonnees, `lastQuestion` / `previousQuestion` (resolution du texte de reclamation via heuristiques).
+- Insert `leads` + eventuellement premiere ligne `lead_complaints` si reclamation significative.
+
+### `addLeadComplaint`
+
+- Input: `agentId`, `leadId`, `lastQuestion`, `previousQuestion?`
+- Verifie lead + agent; insert `lead_complaints` ou `skipped` si texte trop faible.
+
+## 7) Logique API `/api/chat` et construction du prompt
 
 Source: `src/app/api/chat/route.ts`
 
-### Input attendu
+### Input attendu (corps JSON)
 
 ```json
 {
   "agentId": "uuid-string",
   "message": "question utilisateur courante",
+  "sessionId": "uuid-string",
   "messages": [
     { "role": "user", "content": "..." },
     { "role": "assistant", "content": "..." }
-  ]
+  ],
+  "leadCapturedThisSession": false,
+  "userFirstName": "",
+  "leadId": ""
 }
 ```
 
-### Etapes serveur
+- `sessionId` est **obligatoire** (sinon 400).
+- `leadId` non vide: en fin de stream, appel `addLeadComplaint` pour enregistrer la question courante comme nouveau ticket lie au lead.
+- `leadCapturedThisSession` / `userFirstName`: adapte le prompt systeme (ton post-capture).
 
-1. Validation JSON + `agentId` + `message`
+### Etapes serveur (ordre contractuel)
+
+La persistance des messages de la conversation courante est **centralisee dans cette route** (pas de parallele « sauvegarde client seule » pour les echanges user/assistant issus du stream).
+
+1. Validation JSON + `agentId` + `message` + `sessionId`
 2. Chargement agent via `fetchAgentByIdForChat(agentId)`
-   - session user (`user_id` doit correspondre) ou mode POC
-3. Construction `systemInstruction` via `buildAluraSystemInstruction(company_name, description, faq_data)`
-4. Conversion historique `messages` -> format Gemini (`user` / `model`)
-5. Initialisation Gemini:
-   - modele principal: `GEMINI_MODEL` (sans point final) ou `gemini-2.5-flash`
-   - fallback si model not found: `gemini-1.5-flash`
-6. Streaming:
-   - `startChat({ history })`
-   - `sendMessageStream(message)`
-   - chunks textes convertis en `ReadableStream<Uint8Array>`
+3. **`saveMessage` role `user`** avec le `message` courant
+4. Construction `systemInstruction` (incl. contexte lead si capture)
+5. Conversion historique `messages` -> format Gemini
+6. Streaming Gemini
+7. En fin de stream: **`saveMessage` role `assistant`** sur le texte final (sans marqueur lead)
+8. Si `leadId` present: **`addLeadComplaint`** avec question derivee de l'historique + message courant
 
 ### Prompt systeme effectif
 
@@ -159,3 +232,11 @@ Construit dans `src/lib/ai/alura-chat-prompt.ts` avec:
 Si `faq_data` vide/non structure:
 - le prompt injecte explicitement qu'il faut surtout s'appuyer sur la description entreprise
 - comportement degrade mais robuste (pas de blocage)
+
+## 8) Widget technique
+
+- `src/lib/agents/fetch-agent-widget.ts`: lecture `agents` (id, company_name) par **service role** pour `/widget`.
+- `src/app/(widget)/layout.tsx`: conteneur `h-dvh`, `overflow-hidden`, sans marges parasites.
+- `src/app/(widget)/widget/page.tsx`: `ChatPanel` avec `layout="embedded"`.
+- `src/app/(widget)/embed/page.tsx`: `ChatLauncher` pour integration tiers.
+- `src/components/chat-launcher.tsx`: iframe `/widget?agentId=...`, montage persistant apres premier open (etat conversation conserve a la fermeture du panneau).

@@ -1,5 +1,6 @@
 import { ChatPanel } from "@/app/(dashboard)/chat/chat-panel";
 import { fetchAgentForWidget } from "@/lib/agents/fetch-agent-widget";
+import { isWidgetAgentIdFormatValid } from "@/lib/agents/widget-agent-id";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +14,24 @@ export default async function WidgetPage({ searchParams }: PageProps) {
 
   if (!raw) {
     return (
-      <div className="flex min-h-0 w-full flex-1 items-center justify-center bg-zinc-950 px-4 text-center text-sm text-zinc-400">
-        Paramètre <code className="text-zinc-300">agentId</code> manquant. Utilisez{" "}
-        <code className="text-zinc-300">?agentId=…</code>
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-2 bg-zinc-950 px-4 text-center text-sm text-zinc-400">
+        <p className="font-medium text-zinc-200">Paramètre manquant</p>
+        <p>
+          Ajoutez <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200">agentId</code>{" "}
+          dans l’URL : <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200">?agentId=…</code>
+        </p>
+      </div>
+    );
+  }
+
+  if (!isWidgetAgentIdFormatValid(raw)) {
+    return (
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-2 bg-zinc-950 px-4 text-center text-sm text-zinc-400">
+        <p className="font-medium text-zinc-200">Identifiant d’agent invalide</p>
+        <p>
+          <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200">agentId</code> doit être
+          un UUID valide (format v4).
+        </p>
       </div>
     );
   }
@@ -23,9 +39,12 @@ export default async function WidgetPage({ searchParams }: PageProps) {
   const agent = await fetchAgentForWidget(raw);
   if (!agent) {
     return (
-      <div className="flex min-h-0 w-full flex-1 items-center justify-center bg-zinc-950 px-4 text-center text-sm text-zinc-400">
-        Agent introuvable ou configuration serveur incomplète (clé service requise pour le
-        widget).
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-2 bg-zinc-950 px-4 text-center text-sm text-zinc-400">
+        <p className="font-medium text-zinc-200">Agent introuvable</p>
+        <p>
+          Aucun agent ne correspond à cet identifiant, ou le widget n’est pas correctement configuré
+          côté serveur (variable <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-zinc-200">SUPABASE_SERVICE_ROLE_KEY</code>).
+        </p>
       </div>
     );
   }

@@ -1,14 +1,24 @@
 "use client";
 
+import { isWidgetAgentIdFormatValid } from "@/lib/agents/widget-agent-id";
 import { MessageCircle } from "lucide-react";
 import { useCallback, useState } from "react";
 
 type Props = {
   agentId: string;
-  /** URL de base du site Alura (ex. https://app.alura.tn). Par défaut : origine courante. */
+  /** Surcharge explicite de l’origine Alura (iframe). Sinon `NEXT_PUBLIC_APP_URL`, sinon `window.location.origin`. */
   baseUrl?: string;
   className?: string;
 };
+
+function resolveWidgetOrigin(baseUrl: string | undefined): string {
+  const fromProp = baseUrl?.replace(/\/$/, "").trim();
+  if (fromProp) return fromProp;
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim();
+  if (fromEnv) return fromEnv;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "";
+}
 
 export function ChatLauncher({ agentId, baseUrl, className }: Props) {
   const [open, setOpen] = useState(false);
@@ -18,23 +28,31 @@ export function ChatLauncher({ agentId, baseUrl, className }: Props) {
   const close = useCallback(() => setOpen(false), []);
 
   const trimmed = agentId.trim();
-  const origin =
-    (baseUrl?.replace(/\/$/, "") || (typeof window !== "undefined" ? window.location.origin : "")) ||
-    "";
+  const idValid = trimmed.length > 0 && isWidgetAgentIdFormatValid(trimmed);
+  const origin = resolveWidgetOrigin(baseUrl);
   const widgetSrc =
-    trimmed && origin
+    idValid && origin
       ? `${origin}/widget?agentId=${encodeURIComponent(trimmed)}`
       : "";
 
   return (
     <>
+      {trimmed.length > 0 && !idValid ? (
+        <p
+          role="alert"
+          className="fixed bottom-24 right-6 z-40 max-w-xs rounded-lg border border-amber-900/60 bg-amber-950/95 px-3 py-2 text-xs text-amber-100 shadow-lg md:bottom-28"
+        >
+          Identifiant d’agent invalide. Utilisez un UUID valide dans{" "}
+          <code className="rounded bg-amber-900/50 px-1">?agentId=</code>.
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={() => {
           setIframePersist(true);
           setOpen(true);
         }}
-        disabled={!trimmed}
+        disabled={!idValid}
         className={
           className ??
           "fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-900 text-zinc-100 shadow-lg ring-1 ring-zinc-700/80 transition hover:bg-zinc-800 hover:ring-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-40"
@@ -77,6 +95,7 @@ export function ChatLauncher({ agentId, baseUrl, className }: Props) {
               <iframe
                 title="Alura — chat"
                 src={widgetSrc}
+                sandbox="allow-scripts allow-same-origin allow-forms"
                 className={`block h-full min-h-0 w-full min-w-0 origin-bottom border-0 transition-all duration-300 ease-out ${
                   open
                     ? "pointer-events-auto scale-100 opacity-100"

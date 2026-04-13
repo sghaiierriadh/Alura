@@ -6,6 +6,10 @@ import { useState, useTransition, type FormEvent } from "react";
 
 type Props = {
   agentId: string;
+  /** Session courante du chat — stockée sur le lead pour l’admin */
+  sessionId?: string | null;
+  /** Origine : widget | embed | dashboard | api | unknown */
+  source?: string | null;
   lastQuestion: string | null;
   previousQuestion?: string | null;
   onSubmitted?: (payload: {
@@ -18,6 +22,8 @@ type Props = {
 
 export function LeadForm({
   agentId,
+  sessionId,
+  source,
   lastQuestion,
   previousQuestion,
   onSubmitted,
@@ -43,6 +49,8 @@ export function LeadForm({
       });
       const result = await captureLead({
         agentId,
+        sessionId: sessionId?.trim() || null,
+        source: source?.trim() || null,
         fullName,
         email,
         phone,
