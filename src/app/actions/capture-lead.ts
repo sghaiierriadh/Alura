@@ -3,6 +3,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 
+import { toDbComplaintPriority } from "@/lib/ai/complaint-priority";
+import {
+  isMeaningfulComplaint,
+  normalizeOptional,
+  resolveComplaintText,
+} from "@/lib/ai/complaint-text";
 import type { Database } from "@/types/database.types";
 
 export type CaptureLeadInput = {
@@ -36,11 +42,6 @@ function getPocUserId(): string | null {
     : null;
 }
 
-function normalizeOptional(value?: string | null): string | null {
-  const v = value?.trim() ?? "";
-  return v.length > 0 ? v : null;
-}
-
 const LEAD_SOURCES = new Set(["widget", "embed", "dashboard", "api", "unknown"]);
 
 /**
@@ -53,44 +54,6 @@ function normalizeLeadSource(value?: string | null): string {
   if (LEAD_SOURCES.has(v)) return v;
   if (v === "chat" || v === "app") return "dashboard";
   return "unknown";
-}
-
-function looksLikeWeakQuestion(text: string | null): boolean {
-  if (!text) return true;
-  const cleaned = text.trim();
-  if (cleaned.length < 12) return true;
-  const tokens = cleaned.split(/\s+/);
-  if (tokens.length <= 2) return true;
-  return !/[?]/.test(cleaned) && cleaned.length < 20;
-}
-
-function resolveComplaintText(
-  lastQuestion: string | null,
-  previousQuestion: string | null,
-): string | null {
-  if (!looksLikeWeakQuestion(lastQuestion)) return lastQuestion;
-  if (!looksLikeWeakQuestion(previousQuestion)) return previousQuestion;
-  return lastQuestion ?? previousQuestion;
-}
-
-function isMeaningfulComplaint(text: string | null): text is string {
-  if (!text) return false;
-  const normalized = text.trim().toLowerCase();
-  if (!normalized) return false;
-  if (normalized.length < 8) return false;
-  const trivial = new Set([
-    "ok",
-    "okay",
-    "merci",
-    "thanks",
-    "thx",
-    "super",
-    "d'accord",
-    "dak",
-    "c bon",
-  ]);
-  if (trivial.has(normalized)) return false;
-  return !looksLikeWeakQuestion(normalized);
 }
 
 export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadResult> {
@@ -224,6 +187,8 @@ export type AddLeadComplaintInput = {
   leadId: string;
   lastQuestion: string | null;
   previousQuestion?: string | null;
+  /** low | normal | high — défaut normal si absent ou invalide */
+  priority?: string | null;
 };
 
 export async function addLeadComplaint(
@@ -245,6 +210,8 @@ export async function addLeadComplaint(
   if (!isMeaningfulComplaint(lastQuestion)) {
     return { ok: true, leadId, skipped: true };
   }
+
+  const complaintPriority = toDbComplaintPriority(input.priority);
 
   const pocUserId = getPocUserId();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -283,7 +250,7 @@ export async function addLeadComplaint(
         lead_id: leadId,
         content: lastQuestion,
         status: "open",
-        priority: "normal",
+        priority: complaintPriority,
       })
       .select("id")
       .single();
@@ -344,7 +311,7 @@ export async function addLeadComplaint(
       lead_id: leadId,
       content: lastQuestion,
       status: "open",
-      priority: "normal",
+      priority: complaintPriority,
     })
     .select("id")
     .single();

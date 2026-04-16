@@ -7,13 +7,15 @@ import {
 } from "@/app/actions/update-knowledge";
 import type { FaqPair } from "@/lib/knowledge/faq-data";
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type Props = {
   companyName: string;
   description: string;
   initialFaq: FaqPair[];
+  /** Entrées `knowledge` avec `source = human_resolution` (résolution tickets). */
+  learnedFromTickets: FaqPair[];
 };
 
 function EditDialog({
@@ -126,8 +128,14 @@ export function KnowledgeView({
   companyName,
   description,
   initialFaq,
+  learnedFromTickets,
 }: Props) {
   const [items, setItems] = useState<FaqPair[]>(initialFaq);
+  const [learned, setLearned] = useState<FaqPair[]>(learnedFromTickets);
+
+  useEffect(() => {
+    setLearned(learnedFromTickets);
+  }, [learnedFromTickets]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
   const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -220,9 +228,46 @@ export function KnowledgeView({
         )}
       </header>
 
+      {learned.length > 0 ? (
+        <section className="mt-10">
+          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+            Apprises depuis les tickets
+          </h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+            Ces entrées proviennent de résolutions enregistrées dans le centre de tickets (source{" "}
+            <span className="font-mono text-zinc-600 dark:text-zinc-300">human_resolution</span>) et
+            sont utilisées par Alura dans le chat (RAG + embeddings).
+          </p>
+          <ul className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+            {learned.map((item, index) => (
+              <li
+                key={`learned-${index}-${item.question.slice(0, 24)}`}
+                className="flex flex-col rounded-2xl border border-emerald-900/20 bg-emerald-950/20 p-5 dark:border-emerald-800/30 dark:bg-emerald-950/25"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700/90 dark:text-emerald-400/95">
+                  Ticket → connaissance
+                </p>
+                <p className="mt-2 text-xs font-medium uppercase tracking-wide text-zinc-400">
+                  Question
+                </p>
+                <p className="mt-1 text-sm font-medium leading-snug text-zinc-900 dark:text-zinc-100">
+                  {item.question || "—"}
+                </p>
+                <p className="mt-3 text-xs font-medium uppercase tracking-wide text-zinc-400">
+                  Réponse
+                </p>
+                <p className="mt-1 flex-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                  {item.answer || "—"}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-          Questions & réponses
+          Questions & réponses (manuel)
         </h2>
         <button
           type="button"
@@ -234,7 +279,7 @@ export function KnowledgeView({
         </button>
       </div>
 
-      {items.length === 0 ? (
+      {items.length === 0 && learned.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -255,6 +300,25 @@ export function KnowledgeView({
             className="mt-6 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
             Créer la première entrée
+          </button>
+        </motion.div>
+      ) : items.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="mt-8 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50/40 px-6 py-10 text-center dark:border-zinc-800 dark:bg-zinc-950/30"
+        >
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Aucune entrée manuelle dans la FAQ éditable pour l’instant. Les entrées ci-dessus
+            proviennent des tickets résolus.
+          </p>
+          <button
+            type="button"
+            onClick={openAdd}
+            className="mt-4 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Ajouter une entrée manuelle
           </button>
         </motion.div>
       ) : (

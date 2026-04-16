@@ -1,7 +1,10 @@
 import { addLeadComplaint } from "@/app/actions/capture-lead";
+import { buildComplaintTextForTicket } from "@/lib/ai/complaint-text";
 import { saveMessage } from "@/app/actions/save-message";
 import { fetchAgentByIdForChat } from "@/lib/agents/fetch-agent-chat";
 import { buildAluraSystemInstruction } from "@/lib/ai/alura-chat-prompt";
+import { fetchKnowledgeMatchesForChat } from "@/lib/knowledge/fetch-matches-for-chat";
+import { classifyComplaintPriority } from "@/lib/ai/complaint-priority";
 import {
   hasLeadFormTrigger,
   stripLeadFormTrigger,
@@ -26,6 +29,19 @@ function isWeakQuestion(text: string | null): boolean {
   const tokens = cleaned.split(/\s+/);
   if (tokens.length <= 2) return true;
   return !/[?]/.test(cleaned) && cleaned.length < 20;
+}
+
+function recentUserMessageLines(
+  history: ChatMessage[] | undefined,
+  current: string,
+): string[] {
+  const users = (history ?? [])
+    .filter((m) => m.role === "user")
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+  const cur = current.trim();
+  if (cur.length > 0 && users[users.length - 1] !== cur) users.push(cur);
+  return users;
 }
 
 function deriveComplaintQuestion(
@@ -189,6 +205,7 @@ export async function POST(req: Request) {
   }
 
   const companyName = agent.company_name ?? "—";
+  const retrievedKnowledgeFaq = await fetchKnowledgeMatchesForChat(agentId, message);
   const systemInstruction = buildAluraSystemInstruction(
     companyName,
     agent.description,
@@ -199,6 +216,7 @@ export async function POST(req: Request) {
         leadCapturedThisSession && userFirstName.length > 0
           ? userFirstName
           : null,
+      retrievedKnowledgeFaq,
     },
   );
 
@@ -206,6 +224,7 @@ export async function POST(req: Request) {
 
   const primaryModel =
     process.env.GEMINI_MODEL?.trim().replace(/\.$/, "") || DEFAULT_MODEL;
+  let modelUsedForChat = primaryModel;
 
   const genAI = new GoogleGenerativeAI(apiKey);
 
@@ -237,6 +256,7 @@ export async function POST(req: Request) {
         streamResult = await streamGeminiOnceWith503Retry(() =>
           streamWithModel(FALLBACK_MODEL),
         );
+        modelUsedForChat = FALLBACK_MODEL;
         console.log("[api/chat] Gemini Call... stream obtained (fallback)");
       } catch (fallbackErr) {
         if (isServiceUnavailableError(fallbackErr)) {
@@ -295,6 +315,23 @@ export async function POST(req: Request) {
 
         if (leadIdForComplaint.length > 0) {
           const complaint = deriveComplaintQuestion(body.messages, message);
+          const ticketBody = buildComplaintTextForTicket(
+            complaint.lastQuestion,
+            complaint.previousQuestion,
+          );
+          let priorityForComplaint: string | undefined;
+          if (ticketBody && apiKey) {
+            try {
+              priorityForComplaint = await classifyComplaintPriority({
+                apiKey,
+                model: modelUsedForChat,
+                recentUserMessages: recentUserMessageLines(body.messages, message),
+                complaintText: ticketBody,
+              });
+            } catch (e) {
+              console.warn("[api/chat] classifyComplaintPriority:", e);
+            }
+          }
           console.log("[api/chat] addLeadComplaint (await) — déclenché car leadId présent", {
             agentId,
             leadId: leadIdForComplaint,
@@ -302,12 +339,14 @@ export async function POST(req: Request) {
             leadCapturedThisSession,
             hadTrigger: hasLeadFormTrigger(accumulated),
             lastQuestionPreview: (complaint.lastQuestion ?? "").slice(0, 120),
+            priorityPreview: priorityForComplaint ?? "(défaut)",
           });
           const upd = await addLeadComplaint({
             agentId,
             leadId: leadIdForComplaint,
             lastQuestion: complaint.lastQuestion,
             previousQuestion: complaint.previousQuestion,
+            priority: priorityForComplaint,
           });
           if (!upd.ok) {
             console.error(

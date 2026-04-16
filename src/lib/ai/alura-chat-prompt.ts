@@ -1,5 +1,5 @@
 import { LEAD_FORM_TRIGGER } from "@/lib/ai/lead-form-trigger";
-import { parseFaqData } from "@/lib/knowledge/faq-data";
+import { parseFaqData, type FaqPair } from "@/lib/knowledge/faq-data";
 import type { Json } from "@/types/database.types";
 
 export type BuildAluraSystemOptions = {
@@ -7,6 +7,8 @@ export type BuildAluraSystemOptions = {
   leadAlreadyCapturedThisSession?: boolean;
   /** Prénom connu (ex. après capture lead) — utilisation naturelle dans les réponses. */
   userFirstName?: string | null;
+  /** Entrées issues de `public.knowledge` (ex. résolutions humaines), injectées dans le contexte RAG. */
+  retrievedKnowledgeFaq?: FaqPair[];
 };
 
 export function buildAluraSystemInstruction(
@@ -18,10 +20,13 @@ export function buildAluraSystemInstruction(
   const name = companyName.trim() || "cette entreprise";
   const desc = (description ?? "").trim() || "Non renseignée.";
   const pairs = parseFaqData(faqData);
+  const retrieved =
+    options?.retrievedKnowledgeFaq?.filter((p) => (p.question || p.answer).trim()) ?? [];
+  const merged: FaqPair[] = [...pairs, ...retrieved];
 
   const knowledgeBlock =
-    pairs.length > 0
-      ? pairs
+    merged.length > 0
+      ? merged
           .map(
             (p) =>
               `Q : ${p.question || "—"}\nR : ${p.answer || "—"}`,
@@ -70,7 +75,8 @@ Consignes :
 - Structure type : empathie brève → explication rapide → proposition concrète ou prochaine étape.
 - Au début de la conversation, présente-toi spontanément en une phrase puis propose ton aide.
 - Sois proactive : réponses utiles, orientées solution, sans blabla.
-- Priorise les informations de la FAQ lorsqu'elles répondent à la question.
+- Priorise les informations de la FAQ (y compris les extraits issus de résolutions validées par l’équipe) lorsqu’elles répondent à la question.
+- Repère les signaux d'urgence (délais très courts, « maintenant », « bloqué », production impactée), la frustration marquée, ou les sujets à fort enjeu (paiement, facturation, accès compte, sécurité) : sois plus direct, rassurant et orienté solution ; ne mentionne jamais de libellé interne de priorité.
 - Si l’utilisateur écrit en darja tunisienne, réponds intégralement en darja tunisienne fluide et concise ; ne mélange pas avec l’arabe classique ni le français (sauf termes usuels empruntés en Tunisie si naturels).${prenomBlock}${escalationWhenLeadUnknown}${escalationWhenLeadKnown}
 - Ne prétends pas avoir accès à des systèmes externes ou à des données non fournies ici.`;
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { DataTable, type DataTableColumn } from "@/components/admin/data-table";
+import { TicketPrioritySelect } from "@/components/admin/ticket-priority-select";
 import { TicketStatusEditor } from "@/components/admin/ticket-status-editor";
 import type { TicketWithLead } from "@/lib/admin/dashboard-queries";
 import { Button } from "@/components/ui/button";
@@ -37,26 +38,6 @@ function excerpt(text: string, max = 96) {
   const t = text.trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max)}…`;
-}
-
-function priorityLabel(p: string | null | undefined) {
-  const v = (p ?? "normal").trim().toLowerCase();
-  if (v === "high") return "Haute";
-  if (v === "low") return "Basse";
-  if (v === "medium") return "Moyenne";
-  return "Normale";
-}
-
-function priorityBadgeClass(p: string | null | undefined) {
-  const v = (p ?? "normal").trim().toLowerCase();
-  if (v === "high") {
-    return "bg-red-500/15 text-red-900 ring-red-500/30 dark:text-red-100 dark:ring-red-400/40";
-  }
-  if (v === "low") {
-    return "bg-sky-500/15 text-sky-900 ring-sky-500/30 dark:text-sky-100 dark:ring-sky-400/35";
-  }
-  /* normal, medium, ou valeur inconnue : traité comme priorité « moyenne » (orange) */
-  return "bg-orange-500/15 text-orange-950 ring-orange-500/30 dark:text-orange-100 dark:ring-orange-400/35";
 }
 
 export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
@@ -115,13 +96,9 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
     {
       id: "priority",
       header: "Priorité",
-      headerClassName: "w-28",
+      headerClassName: "w-[11rem]",
       cell: (row) => (
-        <span
-          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${priorityBadgeClass(row.priority)}`}
-        >
-          {priorityLabel(row.priority)}
-        </span>
+        <TicketPrioritySelect complaintId={row.id} priority={row.priority} />
       ),
     },
     {
@@ -131,7 +108,7 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
       cell: (row) => (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
           <TicketStatusEditor
-            key={`${row.id}-${row.status}-${(row.resolution_notes ?? "").slice(0, 24)}`}
+            key={row.id}
             complaintId={row.id}
             initialStatus={row.status || "open"}
             initialResolutionNotes={row.resolution_notes}
@@ -187,7 +164,7 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
             <SelectContent>
               <SelectItem value={FILTER_ALL}>Toutes</SelectItem>
               <SelectItem value="low">Basse</SelectItem>
-              <SelectItem value="normal">Normale</SelectItem>
+              <SelectItem value="normal">Moyenne</SelectItem>
               <SelectItem value="high">Haute</SelectItem>
             </SelectContent>
           </Select>

@@ -112,7 +112,15 @@ export type Database = {
           priority?: string;
           created_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "lead_complaints_lead_id_fkey";
+            columns: ["lead_id"];
+            isOneToOne: false;
+            referencedRelation: "leads";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       messages: {
         Row: {
@@ -141,9 +149,57 @@ export type Database = {
         };
         Relationships: [];
       };
+      knowledge: {
+        Row: {
+          id: string;
+          agent_id: string;
+          question: string;
+          answer: string;
+          source: string;
+          /** pgvector — sérialisé côté client comme chaîne `[v1,v2,…]` ou null */
+          embedding: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          question: string;
+          answer: string;
+          source?: string;
+          embedding?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          question?: string;
+          answer?: string;
+          source?: string;
+          embedding?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_agent_id_fkey";
+            columns: ["agent_id"];
+            isOneToOne: false;
+            referencedRelation: "agents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      match_knowledge: {
+        Args: {
+          p_agent_id: string;
+          query_embedding: string;
+          match_count?: number;
+        };
+        Returns: { question: string; answer: string }[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
