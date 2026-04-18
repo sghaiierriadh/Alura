@@ -1,8 +1,16 @@
 "use client";
 
 import { analyzeDocument } from "@/app/actions/analyze-doc";
-import { analyzeWebsiteUrl } from "@/app/actions/analyze-url";
 import { saveAgent } from "@/app/actions/save-agent";
+import { saveTemplateKnowledge } from "@/app/actions/save-template-knowledge";
+import { saveWebsiteKnowledge } from "@/app/actions/save-website-knowledge";
+import type { PillarBlock } from "@/lib/knowledge/parse-pillars";
+import type {
+  CuratedFact,
+  DetectedPage,
+  ScrapeProgress,
+  WebsiteScrapeResult,
+} from "@/lib/ingestion/website-scraper";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -30,6 +38,116 @@ const URL_MAGIC_MESSAGES = [
   "Lecture des pages clés (FAQ, services, offres)…",
   "Analyse par Alura…",
 ] as const;
+
+type StreamCallbacks = {
+  onStage: (message: string) => void;
+  onPages: (pages: DetectedPage[]) => void;
+};
+
+type StreamOutcome =
+  | { ok: true; data: WebsiteScrapeResult }
+  | { ok: false; error: string };
+
+async function runWebsiteAnalysisStream(
+  url: string,
+  cb: StreamCallbacks,
+): Promise<StreamOutcome> {
+  let response: Response;
+  try {
+    response = await fetch("/api/onboarding/analyze-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Connexion impossible au service d’analyse.",
+    };
+  }
+
+  if (!response.ok || !response.body) {
+    let errorMessage = `Erreur serveur (${response.status}).`;
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload?.error) errorMessage = payload.error;
+    } catch {
+      /* ignore */
+    }
+    return { ok: false, error: errorMessage };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResult: WebsiteScrapeResult | null = null;
+  let streamError: string | null = null;
+
+  const handleEvent = (event: ScrapeProgress) => {
+    switch (event.type) {
+      case "stage":
+        cb.onStage(event.message);
+        break;
+      case "pages-detected":
+        cb.onPages(event.pages);
+        break;
+      case "page-start":
+        cb.onStage(event.message);
+        break;
+      case "page-done":
+        break;
+      case "curating":
+        cb.onStage(event.message);
+        break;
+      case "done":
+        finalResult = event.result;
+        break;
+      case "error":
+        streamError = event.message;
+        break;
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nlIndex = buffer.indexOf("\n");
+    while (nlIndex !== -1) {
+      const line = buffer.slice(0, nlIndex).trim();
+      buffer = buffer.slice(nlIndex + 1);
+      if (line.length > 0) {
+        try {
+          handleEvent(JSON.parse(line) as ScrapeProgress);
+        } catch {
+          /* ligne corrompue : on ignore */
+        }
+      }
+      nlIndex = buffer.indexOf("\n");
+    }
+  }
+
+  const tail = buffer.trim();
+  if (tail.length > 0) {
+    try {
+      handleEvent(JSON.parse(tail) as ScrapeProgress);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (streamError) return { ok: false, error: streamError };
+  if (!finalResult) {
+    return {
+      ok: false,
+      error: "Flux interrompu avant la fin de l’analyse.",
+    };
+  }
+  return { ok: true, data: finalResult };
+}
 
 function DocumentIcon({ className }: { className?: string }) {
   return (
@@ -126,6 +244,11 @@ export default function OnboardingPage() {
   const [faqHighlights, setFaqHighlights] = useState<string[]>([]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [templatePiliers, setTemplatePiliers] = useState<PillarBlock[]>([]);
+  const [templatePillarsFound, setTemplatePillarsFound] = useState(0);
+  const [websiteFacts, setWebsiteFacts] = useState<CuratedFact[]>([]);
+  const [websitePages, setWebsitePages] = useState<DetectedPage[]>([]);
+  const [urlLiveStage, setUrlLiveStage] = useState<string>("");
 
   useEffect(() => {
     if (!isAnalyzing) return;
@@ -159,6 +282,11 @@ export default function OnboardingPage() {
     setSector("");
     setDescription("");
     setFaqHighlights([]);
+    setTemplatePiliers([]);
+    setTemplatePillarsFound(0);
+    setWebsiteFacts([]);
+    setWebsitePages([]);
+    setUrlLiveStage("");
     setLastSource(null);
     setIsAnalyzing(true);
     setAnalysisKind(useUrl ? "url" : "pdf");
@@ -170,16 +298,21 @@ export default function OnboardingPage() {
 
     try {
       if (useUrl) {
-        const result = await analyzeWebsiteUrl(urlTrim);
-        if (result.ok) {
-          setCompanyName(result.data.companyName);
-          setSector(result.data.sector);
-          setDescription(result.data.description);
-          setFaqHighlights(result.data.faqHighlights);
+        const streamResult = await runWebsiteAnalysisStream(urlTrim, {
+          onStage: (msg) => setUrlLiveStage(msg),
+          onPages: (pages) => setWebsitePages(pages),
+        });
+        if (streamResult.ok) {
+          setCompanyName(streamResult.data.companyName);
+          setSector(streamResult.data.sector);
+          setDescription(streamResult.data.description);
+          setFaqHighlights(streamResult.data.faqHighlights);
+          setWebsitePages(streamResult.data.pagesAnalyzed);
+          setWebsiteFacts(streamResult.data.facts);
           setAnalysisComplete(true);
           setLastSource("url");
         } else {
-          setAnalysisError(result.error);
+          setAnalysisError(streamResult.error);
         }
       } else {
         const formData = new FormData();
@@ -190,6 +323,13 @@ export default function OnboardingPage() {
           setSector(result.data.sector);
           setDescription(result.data.description);
           setFaqHighlights(result.data.faqHighlights);
+          if (result.data.template?.detected) {
+            setTemplatePiliers(result.data.template.piliers);
+            setTemplatePillarsFound(result.data.template.pillarsFound);
+          } else {
+            setTemplatePiliers([]);
+            setTemplatePillarsFound(0);
+          }
           setAnalysisComplete(true);
           setLastSource("pdf");
         } else {
@@ -216,12 +356,42 @@ export default function OnboardingPage() {
         description,
         faqHighlights,
       });
-      if (result.ok) {
-        toast.success("Alura est maintenant activée !");
-        router.push("/dashboard");
-      } else {
+      if (!result.ok) {
         toast.error(result.error);
+        return;
       }
+
+      if (templatePiliers.length > 0) {
+        const knowledgeResult = await saveTemplateKnowledge(templatePiliers);
+        if (knowledgeResult.ok) {
+          toast.success(
+            `Alura activée ! ${knowledgeResult.inserted} bloc${
+              knowledgeResult.inserted > 1 ? "s" : ""
+            } de connaissance indexé${knowledgeResult.inserted > 1 ? "s" : ""}.`,
+          );
+        } else {
+          toast.warning(
+            `Agent enregistré, mais indexation partielle : ${knowledgeResult.error}`,
+          );
+        }
+      } else if (websiteFacts.length > 0) {
+        const knowledgeResult = await saveWebsiteKnowledge(websiteFacts);
+        if (knowledgeResult.ok) {
+          toast.success(
+            `Alura activée ! ${knowledgeResult.inserted} bloc${
+              knowledgeResult.inserted > 1 ? "s" : ""
+            } de connaissance indexé${knowledgeResult.inserted > 1 ? "s" : ""} depuis le site.`,
+          );
+        } else {
+          toast.warning(
+            `Agent enregistré, mais indexation partielle : ${knowledgeResult.error}`,
+          );
+        }
+      } else {
+        toast.success("Alura est maintenant activée !");
+      }
+
+      router.push("/dashboard");
     } catch (e) {
       const message =
         e instanceof Error ? e.message : "Une erreur est survenue lors de l’enregistrement.";
@@ -229,7 +399,16 @@ export default function OnboardingPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [companyName, description, faqHighlights, isSaving, router, sector]);
+  }, [
+    companyName,
+    description,
+    faqHighlights,
+    isSaving,
+    router,
+    sector,
+    templatePiliers,
+    websiteFacts,
+  ]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -243,39 +422,52 @@ export default function OnboardingPage() {
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (!f) return;
-    const ok =
-      f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
-    if (!ok) {
-      setAnalysisError("Veuillez déposer un fichier PDF.");
-      return;
-    }
-    setPdfFile(f);
-    setAnalysisError(null);
+  const isSupportedUploadFile = useCallback((f: File): boolean => {
+    const name = f.name.toLowerCase();
+    return (
+      f.type === "application/pdf" ||
+      name.endsWith(".pdf") ||
+      f.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      name.endsWith(".docx")
+    );
   }, []);
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) {
-      setPdfFile(null);
-      return;
-    }
-    const ok =
-      f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
-    if (!ok) {
-      setAnalysisError("Veuillez choisir un fichier PDF.");
-      e.target.value = "";
-      setPdfFile(null);
-      return;
-    }
-    setPdfFile(f);
-    setAnalysisError(null);
-  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      const f = e.dataTransfer.files?.[0];
+      if (!f) return;
+      if (!isSupportedUploadFile(f)) {
+        setAnalysisError("Veuillez déposer un fichier PDF ou DOCX.");
+        return;
+      }
+      setPdfFile(f);
+      setAnalysisError(null);
+    },
+    [isSupportedUploadFile],
+  );
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0];
+      if (!f) {
+        setPdfFile(null);
+        return;
+      }
+      if (!isSupportedUploadFile(f)) {
+        setAnalysisError("Veuillez choisir un fichier PDF ou DOCX.");
+        e.target.value = "";
+        setPdfFile(null);
+        return;
+      }
+      setPdfFile(f);
+      setAnalysisError(null);
+    },
+    [isSupportedUploadFile],
+  );
 
   return (
     <section className="w-full bg-zinc-50 font-sans">
@@ -333,8 +525,25 @@ export default function OnboardingPage() {
                 <p className="mt-1.5 max-w-sm text-center text-xs leading-relaxed text-emerald-800/80">
                   {lastSource === "url"
                     ? "Le profil ci-dessous a été prérempli à partir de votre site web."
-                    : "Le profil ci-dessous a été prérempli à partir de votre document PDF."}
+                    : "Le profil ci-dessous a été prérempli à partir de votre document."}
                 </p>
+                {templatePillarsFound > 0 ? (
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[11px] font-semibold text-indigo-800">
+                    <span aria-hidden>🧭</span>
+                    Structure détectée : {templatePillarsFound} Pilier
+                    {templatePillarsFound > 1 ? "s" : ""} identifié
+                    {templatePillarsFound > 1 ? "s" : ""}
+                  </p>
+                ) : null}
+                {lastSource === "url" && websitePages.length > 0 ? (
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[11px] font-semibold text-indigo-800">
+                    <span aria-hidden>🌐</span>
+                    {websitePages.length} page{websitePages.length > 1 ? "s" : ""} analysée
+                    {websitePages.length > 1 ? "s" : ""}, {websiteFacts.length} bloc
+                    {websiteFacts.length > 1 ? "s" : ""} de connaissance extrait
+                    {websiteFacts.length > 1 ? "s" : ""}
+                  </p>
+                ) : null}
               </div>
             ) : (
               <>
@@ -345,13 +554,69 @@ export default function OnboardingPage() {
                         Option A
                       </span>
                       <span className="text-sm font-medium text-zinc-800">
-                        Fichier PDF
+                        Fichier PDF ou Word
                       </span>
                     </div>
+
+                    <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+                      <p className="text-xs font-semibold text-indigo-900">
+                        Nouveau : modèle FAQ Stratégique
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-indigo-900/80">
+                        Remplissez notre modèle en 4 Piliers pour un onboarding
+                        optimal (nom, mission, horaires, liens, offres, FAQ).
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <a
+                          href="/Template/Alura_Template_FAQ.docx"
+                          download
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[11px] font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <path d="M12 3v12" />
+                            <path d="m7 10 5 5 5-5" />
+                            <path d="M5 21h14" />
+                          </svg>
+                          Télécharger le modèle Word
+                        </a>
+                        <a
+                          href="https://docs.google.com/document/d/1RZumHmr-1FHH0hd3MYVQO2k7BQu-2X9zOL9KEXg1gNk/copy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <path d="M14 3h7v7" />
+                            <path d="M21 3 10 14" />
+                            <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+                          </svg>
+                          Utiliser le modèle Google Docs
+                        </a>
+                      </div>
+                    </div>
+
                     <input
                       id="onboarding-document"
                       type="file"
-                      accept="application/pdf,.pdf"
+                      accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
                       className="sr-only"
                       onChange={handleFileChange}
                       disabled={isAnalyzing && analysisKind === "url"}
@@ -373,7 +638,7 @@ export default function OnboardingPage() {
                       >
                         <DocumentIcon className="h-10 w-10 text-zinc-400" />
                         <p className="mt-3 max-w-[220px] text-center text-sm font-medium leading-snug text-zinc-700">
-                          Glissez votre PDF ici
+                          Glissez votre PDF ou DOCX ici
                         </p>
                         <p className="mt-1.5 text-center text-xs text-zinc-400">
                           ou cliquez pour parcourir
@@ -386,8 +651,8 @@ export default function OnboardingPage() {
                       </div>
                     </label>
                     <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
-                      Conseil : un PDF de vos tarifs ou de votre FAQ est idéal pour
-                      une configuration rapide et fiable.
+                      Conseil : notre modèle FAQ Stratégique (Word ou Google Docs)
+                      offre la configuration la plus précise et rapide.
                     </p>
                   </div>
 
@@ -484,19 +749,38 @@ export default function OnboardingPage() {
 
                 {isAnalyzing && analysisKind === "url" ? (
                   <div
-                    className="mt-6 flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-zinc-100 bg-gradient-to-b from-zinc-50/80 to-white px-6 py-10"
+                    className="mt-6 flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-zinc-100 bg-gradient-to-b from-zinc-50/80 to-white px-6 py-10"
                     role="status"
                     aria-live="polite"
                     aria-busy="true"
                   >
                     <MagicSpinner />
-                    <p
-                      className={`mt-8 max-w-md text-center text-sm font-medium leading-relaxed text-zinc-700 transition-opacity duration-500 ease-out motion-reduce:transition-none ${
-                        messageVisible ? "opacity-100" : "opacity-0"
-                      }`}
-                    >
-                      {loadingMessages[currentMessageIndex] ?? ""}
+                    <p className="mt-6 max-w-md text-center text-sm font-medium leading-relaxed text-zinc-800">
+                      {urlLiveStage || loadingMessages[currentMessageIndex] || "Analyse en cours…"}
                     </p>
+                    {websitePages.length > 0 ? (
+                      <ul className="mt-5 flex flex-wrap items-center justify-center gap-1.5">
+                        {websitePages.map((p) => {
+                          const active =
+                            urlLiveStage.toLowerCase().includes(p.label.toLowerCase()) ||
+                            (p.label === "Page d'accueil" &&
+                              urlLiveStage.toLowerCase().includes("accueil"));
+                          return (
+                            <li
+                              key={p.url}
+                              className={[
+                                "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                                active
+                                  ? "border-indigo-300 bg-indigo-50 text-indigo-800"
+                                  : "border-zinc-200 bg-white text-zinc-500",
+                              ].join(" ")}
+                            >
+                              {p.label}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
                   </div>
                 ) : null}
               </>
@@ -612,22 +896,111 @@ export default function OnboardingPage() {
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: 0.08 }}
                   className="mt-3 space-y-3 text-sm leading-relaxed text-zinc-700"
                 >
-                  <p className="text-emerald-900/90">
-                    Points clés issus de votre FAQ (aperçu) :
-                  </p>
-                  <ul className="list-inside list-disc space-y-1.5 text-zinc-600">
-                    {faqHighlights
-                      .filter((line) => line.length > 0)
-                      .map((line, idx) => (
-                        <li key={`${idx}-${line.slice(0, 24)}`}>{line}</li>
-                      ))}
-                  </ul>
-                  {faqHighlights.every((l) => !l.length) ? (
-                    <p className="text-zinc-500">
-                      Aucun point FAQ distinct n’a été isolé ; le profil repose
-                      sur le nom, le secteur et la description ci-dessus.
-                    </p>
-                  ) : null}
+                  {templatePillarsFound > 0 ? (
+                    <>
+                      <p className="font-medium text-indigo-900">
+                        Structure détectée : {templatePillarsFound} Pilier
+                        {templatePillarsFound > 1 ? "s" : ""} identifié
+                        {templatePillarsFound > 1 ? "s" : ""}
+                      </p>
+                      <ul className="space-y-1.5 text-zinc-600">
+                        {templatePiliers.map((p) => (
+                          <li
+                            key={`pilier-${p.index}`}
+                            className="flex items-start gap-2"
+                          >
+                            <span
+                              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-semibold text-indigo-700"
+                              aria-hidden
+                            >
+                              {p.index}
+                            </span>
+                            <span>
+                              <span className="font-medium text-zinc-800">
+                                Pilier {p.index}
+                              </span>
+                              {p.title ? ` — ${p.title}` : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-xs text-zinc-500">
+                        Chaque bloc sera indexé avec un embedding dédié dans votre
+                        base de connaissance à la validation.
+                      </p>
+                    </>
+                  ) : lastSource === "url" && websitePages.length > 0 ? (
+                    <>
+                      <p className="font-medium text-indigo-900">
+                        {websitePages.length} page{websitePages.length > 1 ? "s" : ""} analysée
+                        {websitePages.length > 1 ? "s" : ""}, {websiteFacts.length} bloc
+                        {websiteFacts.length > 1 ? "s" : ""} de connaissance extrait
+                        {websiteFacts.length > 1 ? "s" : ""}
+                      </p>
+                      {websitePages.length > 0 ? (
+                        <ul className="flex flex-wrap gap-1.5">
+                          {websitePages.map((p) => (
+                            <li
+                              key={p.url}
+                              className="rounded-full border border-indigo-200 bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-800"
+                            >
+                              {p.label}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {websiteFacts.length > 0 ? (
+                        <ul className="max-h-56 space-y-1.5 overflow-y-auto pr-1 text-zinc-600">
+                          {websiteFacts.slice(0, 8).map((f, idx) => (
+                            <li
+                              key={`fact-${idx}-${f.topic.slice(0, 16)}`}
+                              className="flex items-start gap-2"
+                            >
+                              <span
+                                className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400"
+                                aria-hidden
+                              />
+                              <span>
+                                <span className="font-medium text-zinc-800">
+                                  {f.topic}
+                                </span>
+                                <span className="text-zinc-500"> — {f.content}</span>
+                              </span>
+                            </li>
+                          ))}
+                          {websiteFacts.length > 8 ? (
+                            <li className="pl-3.5 text-[11px] italic text-zinc-400">
+                              +{websiteFacts.length - 8} autres blocs indexés à la
+                              validation…
+                            </li>
+                          ) : null}
+                        </ul>
+                      ) : null}
+                      <p className="text-xs text-zinc-500">
+                        Chaque bloc sera indexé avec un embedding dédié dans votre
+                        base de connaissance à la validation.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-emerald-900/90">
+                        Points clés issus de votre FAQ (aperçu) :
+                      </p>
+                      <ul className="list-inside list-disc space-y-1.5 text-zinc-600">
+                        {faqHighlights
+                          .filter((line) => line.length > 0)
+                          .map((line, idx) => (
+                            <li key={`${idx}-${line.slice(0, 24)}`}>{line}</li>
+                          ))}
+                      </ul>
+                      {faqHighlights.every((l) => !l.length) ? (
+                        <p className="text-zinc-500">
+                          Aucun point FAQ distinct n’a été isolé ; le profil repose
+                          sur le nom, le secteur et la description ci-dessus.
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                 </motion.div>
               ) : (
                 <p className="mt-2 text-center text-sm leading-relaxed text-zinc-400 sm:text-left">

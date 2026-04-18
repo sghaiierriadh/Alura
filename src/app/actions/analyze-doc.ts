@@ -1,7 +1,13 @@
 "use server";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
+
+import {
+  parsePillarsFromText,
+  type PillarBlock,
+} from "@/lib/knowledge/parse-pillars";
 
 export type AnalyzeDocSuccess = {
   ok: true;
@@ -10,6 +16,14 @@ export type AnalyzeDocSuccess = {
     sector: string;
     description: string;
     faqHighlights: string[];
+    /** Informations additionnelles quand un template FAQ Stratégique est détecté. */
+    template?: {
+      detected: true;
+      pillarsFound: number;
+      piliers: PillarBlock[];
+      hours: string;
+      links: string[];
+    };
   };
 };
 
@@ -77,6 +91,34 @@ function normalizeResult(raw: Record<string, unknown>): AnalyzeDocSuccess["data"
   };
 }
 
+type SupportedKind = "pdf" | "docx";
+
+function detectKind(file: File): SupportedKind | null {
+  const name = file.name.toLowerCase();
+  if (file.type === "application/pdf" || name.endsWith(".pdf")) return "pdf";
+  const isDocxMime =
+    file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (isDocxMime || name.endsWith(".docx")) return "docx";
+  return null;
+}
+
+async function extractTextFromPdf(file: File): Promise<string> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const textResult = await parser.getText();
+    return (textResult.text ?? "").trim();
+  } finally {
+    await parser.destroy();
+  }
+}
+
+async function extractTextFromDocx(file: File): Promise<string> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const result = await mammoth.extractRawText({ buffer });
+  return (result.value ?? "").trim();
+}
+
 export async function analyzeDocument(
   formData: FormData,
 ): Promise<AnalyzeDocResult> {
@@ -86,12 +128,70 @@ export async function analyzeDocument(
       return { ok: false, error: "Aucun fichier fourni." };
     }
 
-    const name = file.name.toLowerCase();
-    const isPdf =
-      file.type === "application/pdf" ||
-      name.endsWith(".pdf");
-    if (!isPdf) {
-      return { ok: false, error: "Veuillez déposer un fichier PDF." };
+    const kind = detectKind(file);
+    if (!kind) {
+      return {
+        ok: false,
+        error: "Format non supporté. Veuillez déposer un fichier PDF ou DOCX.",
+      };
+    }
+
+    let documentText = "";
+    try {
+      documentText =
+        kind === "pdf"
+          ? await extractTextFromPdf(file)
+          : await extractTextFromDocx(file);
+    } catch (e) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : "Impossible de lire le contenu du document.";
+      return { ok: false, error: message };
+    }
+
+    if (!documentText.length) {
+      return {
+        ok: false,
+        error:
+          kind === "pdf"
+            ? "Impossible d’extraire du texte de ce PDF (fichier vide ou pages uniquement en image)."
+            : "Impossible d’extraire du texte de ce document DOCX (fichier vide ou corrompu).",
+      };
+    }
+
+    const parsedTemplate = parsePillarsFromText(documentText);
+    const isTemplate = parsedTemplate.pillarsFound >= 2;
+
+    if (isTemplate) {
+      const companyName = parsedTemplate.companyName.trim();
+      const mission = parsedTemplate.mission.trim();
+      const hours = parsedTemplate.hours.trim();
+
+      const highlights: string[] = [];
+      if (mission) highlights.push(`Mission : ${mission}`);
+      if (hours) highlights.push(`Horaires : ${hours}`);
+      if (parsedTemplate.links.length) {
+        highlights.push(`Liens : ${parsedTemplate.links.slice(0, 3).join(" · ")}`);
+      }
+      while (highlights.length < 3) highlights.push("");
+
+      return {
+        ok: true,
+        data: {
+          companyName: companyName || "—",
+          sector: "—",
+          description: mission || "—",
+          faqHighlights: highlights.slice(0, 3),
+          template: {
+            detected: true,
+            pillarsFound: parsedTemplate.pillarsFound,
+            piliers: parsedTemplate.piliers,
+            hours,
+            links: parsedTemplate.links,
+          },
+        },
+      };
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -102,22 +202,6 @@ export async function analyzeDocument(
       };
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const parser = new PDFParse({ data: buffer });
-    let documentText = "";
-    try {
-      const textResult = await parser.getText();
-      documentText = (textResult.text ?? "").trim();
-    } finally {
-      await parser.destroy();
-    }
-    if (!documentText.length) {
-      return {
-        ok: false,
-        error:
-          "Impossible d’extraire du texte de ce PDF (fichier vide ou pages uniquement en image).",
-      };
-    }
     if (documentText.length > MAX_TEXT_CHARS) {
       documentText = documentText.slice(0, MAX_TEXT_CHARS);
     }
