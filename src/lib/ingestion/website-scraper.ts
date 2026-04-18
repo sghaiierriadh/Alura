@@ -1,5 +1,8 @@
 import * as cheerio from "cheerio";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  GoogleGenerativeAI,
+  type GenerateContentResult,
+} from "@google/generative-ai";
 
 export type PageLabel =
   | "Page d'accueil"
@@ -16,7 +19,8 @@ export type PageLabel =
 
 export type DetectedPage = { url: string; label: PageLabel };
 
-export type ScrapedPage = DetectedPage & { text: string; success: boolean };
+/** Page téléchargée avec texte extrait (usage interne au pipeline). */
+type ScrapedPage = DetectedPage & { text: string; success: boolean };
 
 export type CuratedFact = { topic: string; content: string };
 
@@ -298,6 +302,10 @@ function normalizeProfile(raw: Record<string, unknown>): {
   };
 }
 
+/**
+ * Valide et déduplique les objets `{ topic, content }` renvoyés par la **curation IA**
+ * (prompt « faits structurés »), avec seuils de longueur minimale.
+ */
 function normalizeFacts(raw: Record<string, unknown>): CuratedFact[] {
   const list = Array.isArray(raw.facts) ? raw.facts : [];
   const out: CuratedFact[] = [];
@@ -323,12 +331,16 @@ function normalizeFacts(raw: Record<string, unknown>): CuratedFact[] {
 
 type GeminiClient = GoogleGenerativeAI;
 
+/**
+ * Appel Gemini avec sortie JSON (`responseMimeType: application/json`).
+ * Utilisé pour le profil onboarding et pour la liste de faits curés.
+ */
 async function generateJson(
   client: GeminiClient,
   prompt: string,
 ): Promise<string> {
   const primary = process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
-  const run = (modelName: string) =>
+  const run = (modelName: string): Promise<GenerateContentResult> =>
     client
       .getGenerativeModel({
         model: modelName,
@@ -339,7 +351,7 @@ async function generateJson(
       })
       .generateContent(prompt);
 
-  let result;
+  let result: GenerateContentResult;
   try {
     result = await run(primary);
   } catch (firstErr) {
@@ -356,8 +368,12 @@ async function generateJson(
 }
 
 /**
- * Pipeline complet (scraping + nettoyage + curation IA) avec callback de
- * progression compatible streaming NDJSON ou Server Action silencieuse.
+ * Pipeline complet : scraping multi-pages → texte agrégé → **curation IA** en deux volets
+ * (profil JSON + liste de faits `{ topic, content }` pour le RAG), avec callback de
+ * progression (streaming NDJSON ou Server Action silencieuse).
+ *
+ * La curation ne repose pas sur le HTML brut : le modèle reçoit uniquement le texte
+ * nettoyé et doit produire des faits actionnables pour un conseiller client.
  */
 export async function runWebsiteScrape(
   urlInput: string,

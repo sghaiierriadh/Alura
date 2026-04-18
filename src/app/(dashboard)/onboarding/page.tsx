@@ -1,6 +1,10 @@
 "use client";
 
-import { analyzeDocument } from "@/app/actions/analyze-doc";
+import {
+  analyzeDocument,
+  type AnalyzeDocSuccess,
+  type StrategicCategories,
+} from "@/app/actions/analyze-doc";
 import { saveAgent } from "@/app/actions/save-agent";
 import { saveTemplateKnowledge } from "@/app/actions/save-template-knowledge";
 import { saveWebsiteKnowledge } from "@/app/actions/save-website-knowledge";
@@ -47,6 +51,25 @@ type StreamCallbacks = {
 type StreamOutcome =
   | { ok: true; data: WebsiteScrapeResult }
   | { ok: false; error: string };
+
+const PROFILE_PLACEHOLDER = "—";
+
+/** Préfère la première valeur « utile » ; sinon la seconde (ex. fusion document + site). */
+function coalesceProfileField(primary: string, secondary: string): string {
+  const a = primary.trim();
+  const b = secondary.trim();
+  if (a && a !== PROFILE_PLACEHOLDER) return a;
+  if (b && b !== PROFILE_PLACEHOLDER) return b;
+  return a || b || PROFILE_PLACEHOLDER;
+}
+
+/** Jusqu’à 3 lignes en combinant deux listes (ordre : primary puis secondary). */
+function mergeFaqHighlights(primary: string[], secondary: string[]): string[] {
+  const pool = [...primary.filter((s) => s.trim().length > 0), ...secondary.filter((s) => s.trim().length > 0)];
+  const out: string[] = [];
+  for (let i = 0; i < 3; i++) out.push(pool[i] ?? "");
+  return out;
+}
 
 async function runWebsiteAnalysisStream(
   url: string,
@@ -230,7 +253,9 @@ export default function OnboardingPage() {
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [analysisKind, setAnalysisKind] = useState<"url" | "pdf" | null>(null);
-  const [lastSource, setLastSource] = useState<"pdf" | "url" | null>(null);
+  const [lastSource, setLastSource] = useState<"pdf" | "url" | "both" | null>(
+    null,
+  );
   const reduceMotion = useReducedMotion();
 
   const urlReady = useMemo(
@@ -246,6 +271,9 @@ export default function OnboardingPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [templatePiliers, setTemplatePiliers] = useState<PillarBlock[]>([]);
   const [templatePillarsFound, setTemplatePillarsFound] = useState(0);
+  const [documentReorganizedByAi, setDocumentReorganizedByAi] = useState(false);
+  const [strategicPreview, setStrategicPreview] =
+    useState<StrategicCategories | null>(null);
   const [websiteFacts, setWebsiteFacts] = useState<CuratedFact[]>([]);
   const [websitePages, setWebsitePages] = useState<DetectedPage[]>([]);
   const [urlLiveStage, setUrlLiveStage] = useState<string>("");
@@ -270,71 +298,212 @@ export default function OnboardingPage() {
 
     const urlTrim = siteUrl.trim();
     const useUrl = urlTrim.length > 0;
+    const useFile = pdfFile != null;
 
-    if (!useUrl && !pdfFile) {
-      setAnalysisError("Veuillez renseigner une URL ou sélectionner un fichier PDF.");
+    if (!useUrl && !useFile) {
+      setAnalysisError(
+        "Veuillez renseigner une URL ou sélectionner un fichier PDF ou DOCX.",
+      );
       return;
     }
 
+    const hadWebsiteBefore =
+      websiteFacts.length > 0 || websitePages.length > 0;
+    const hadTemplateBefore =
+      templatePiliers.length > 0 || templatePillarsFound > 0;
+
     setAnalysisError(null);
     setAnalysisComplete(false);
-    setCompanyName("");
-    setSector("");
-    setDescription("");
-    setFaqHighlights([]);
-    setTemplatePiliers([]);
-    setTemplatePillarsFound(0);
-    setWebsiteFacts([]);
-    setWebsitePages([]);
-    setUrlLiveStage("");
-    setLastSource(null);
+
+    if (useFile && useUrl) {
+      setCompanyName("");
+      setSector("");
+      setDescription("");
+      setFaqHighlights([]);
+      setTemplatePiliers([]);
+      setTemplatePillarsFound(0);
+      setDocumentReorganizedByAi(false);
+      setStrategicPreview(null);
+      setWebsiteFacts([]);
+      setWebsitePages([]);
+      setUrlLiveStage("");
+      setLastSource(null);
+    } else if (useUrl && !useFile) {
+      setWebsiteFacts([]);
+      setWebsitePages([]);
+      setUrlLiveStage("");
+    } else {
+      setTemplatePiliers([]);
+      setTemplatePillarsFound(0);
+      setDocumentReorganizedByAi(false);
+      setStrategicPreview(null);
+      setCompanyName("");
+      setSector("");
+      setDescription("");
+      setFaqHighlights([]);
+    }
+
     setIsAnalyzing(true);
-    setAnalysisKind(useUrl ? "url" : "pdf");
     setCurrentMessageIndex(0);
     setMessageVisible(true);
-    setLoadingMessages(
-      useUrl ? [...URL_MAGIC_MESSAGES] : [...MAGIC_MESSAGES],
-    );
 
     try {
+      let docResult: AnalyzeDocSuccess | null = null;
+      let webResult: WebsiteScrapeResult | null = null;
+      let docError: string | null = null;
+      let webError: string | null = null;
+
+      if (useFile) {
+        setAnalysisKind("pdf");
+        setLoadingMessages([...MAGIC_MESSAGES]);
+        const formData = new FormData();
+        formData.append("file", pdfFile!);
+        const result = await analyzeDocument(formData);
+        if (result.ok) {
+          docResult = result;
+        } else {
+          docError = result.error;
+        }
+      }
+
       if (useUrl) {
+        setAnalysisKind("url");
+        setLoadingMessages([...URL_MAGIC_MESSAGES]);
         const streamResult = await runWebsiteAnalysisStream(urlTrim, {
           onStage: (msg) => setUrlLiveStage(msg),
           onPages: (pages) => setWebsitePages(pages),
         });
         if (streamResult.ok) {
-          setCompanyName(streamResult.data.companyName);
-          setSector(streamResult.data.sector);
-          setDescription(streamResult.data.description);
-          setFaqHighlights(streamResult.data.faqHighlights);
-          setWebsitePages(streamResult.data.pagesAnalyzed);
-          setWebsiteFacts(streamResult.data.facts);
-          setAnalysisComplete(true);
-          setLastSource("url");
+          webResult = streamResult.data;
         } else {
-          setAnalysisError(streamResult.error);
+          webError = streamResult.error;
         }
-      } else {
-        const formData = new FormData();
-        formData.append("file", pdfFile!);
-        const result = await analyzeDocument(formData);
-        if (result.ok) {
-          setCompanyName(result.data.companyName);
-          setSector(result.data.sector);
-          setDescription(result.data.description);
-          setFaqHighlights(result.data.faqHighlights);
-          if (result.data.template?.detected) {
-            setTemplatePiliers(result.data.template.piliers);
-            setTemplatePillarsFound(result.data.template.pillarsFound);
+      }
+
+      if (useFile && useUrl) {
+        if (docResult && webResult) {
+          const d = docResult.data;
+          const w = webResult;
+          if (d.template?.detected) {
+            setCompanyName(d.companyName);
+            setDescription(d.description);
+            setSector(
+              d.sector !== PROFILE_PLACEHOLDER ? d.sector : w.sector,
+            );
+            setFaqHighlights(mergeFaqHighlights(d.faqHighlights, w.faqHighlights));
+            setTemplatePiliers(d.template.piliers);
+            setTemplatePillarsFound(d.template.pillarsFound);
+            setDocumentReorganizedByAi(false);
+            setStrategicPreview(null);
+          } else if (d.reorganized?.detected) {
+            setCompanyName(d.companyName);
+            setDescription(d.description);
+            setSector(
+              d.sector !== PROFILE_PLACEHOLDER ? d.sector : w.sector,
+            );
+            setFaqHighlights(mergeFaqHighlights(d.faqHighlights, w.faqHighlights));
+            setTemplatePiliers(d.reorganized.piliers);
+            setTemplatePillarsFound(4);
+            setDocumentReorganizedByAi(true);
+            setStrategicPreview(d.reorganized.categories);
+          } else {
+            setCompanyName(coalesceProfileField(d.companyName, w.companyName));
+            setSector(coalesceProfileField(d.sector, w.sector));
+            setDescription(coalesceProfileField(d.description, w.description));
+            setFaqHighlights(mergeFaqHighlights(d.faqHighlights, w.faqHighlights));
+            setTemplatePiliers([]);
+            setTemplatePillarsFound(0);
+            setDocumentReorganizedByAi(false);
+            setStrategicPreview(null);
+          }
+          setWebsitePages(w.pagesAnalyzed);
+          setWebsiteFacts(w.facts);
+          setLastSource("both");
+          setAnalysisComplete(true);
+        } else if (docResult && !webResult) {
+          const d = docResult.data;
+          setCompanyName(d.companyName);
+          setSector(d.sector);
+          setDescription(d.description);
+          setFaqHighlights(d.faqHighlights);
+          if (d.template?.detected) {
+            setTemplatePiliers(d.template.piliers);
+            setTemplatePillarsFound(d.template.pillarsFound);
+            setDocumentReorganizedByAi(false);
+            setStrategicPreview(null);
+          } else if (d.reorganized?.detected) {
+            setTemplatePiliers(d.reorganized.piliers);
+            setTemplatePillarsFound(4);
+            setDocumentReorganizedByAi(true);
+            setStrategicPreview(d.reorganized.categories);
           } else {
             setTemplatePiliers([]);
             setTemplatePillarsFound(0);
+            setDocumentReorganizedByAi(false);
+            setStrategicPreview(null);
           }
-          setAnalysisComplete(true);
+          setWebsiteFacts([]);
+          setWebsitePages([]);
           setLastSource("pdf");
+          setAnalysisComplete(true);
+          if (webError) setAnalysisError(webError);
+        } else if (!docResult && webResult) {
+          const w = webResult;
+          setCompanyName(w.companyName);
+          setSector(w.sector);
+          setDescription(w.description);
+          setFaqHighlights(w.faqHighlights);
+          setTemplatePiliers([]);
+          setTemplatePillarsFound(0);
+          setDocumentReorganizedByAi(false);
+          setStrategicPreview(null);
+          setWebsitePages(w.pagesAnalyzed);
+          setWebsiteFacts(w.facts);
+          setLastSource("url");
+          setAnalysisComplete(true);
+          if (docError) setAnalysisError(docError);
         } else {
-          setAnalysisError(result.error);
+          const parts = [docError, webError].filter(Boolean);
+          setAnalysisError(parts.join(" — ") || "Analyse impossible.");
         }
+      } else if (useFile && docResult) {
+        const d = docResult.data;
+        setCompanyName((prev) => coalesceProfileField(d.companyName, prev));
+        setSector((prev) => coalesceProfileField(d.sector, prev));
+        setDescription((prev) => coalesceProfileField(d.description, prev));
+        setFaqHighlights((prev) => mergeFaqHighlights(d.faqHighlights, prev));
+        if (d.template?.detected) {
+          setTemplatePiliers(d.template.piliers);
+          setTemplatePillarsFound(d.template.pillarsFound);
+          setDocumentReorganizedByAi(false);
+          setStrategicPreview(null);
+        } else if (d.reorganized?.detected) {
+          setTemplatePiliers(d.reorganized.piliers);
+          setTemplatePillarsFound(4);
+          setDocumentReorganizedByAi(true);
+          setStrategicPreview(d.reorganized.categories);
+        } else {
+          setTemplatePiliers([]);
+          setTemplatePillarsFound(0);
+          setDocumentReorganizedByAi(false);
+          setStrategicPreview(null);
+        }
+        setLastSource(hadWebsiteBefore ? "both" : "pdf");
+        setAnalysisComplete(true);
+      } else if (useFile && !docResult) {
+        setAnalysisError(docError ?? "Échec de l’analyse du document.");
+      } else if (useUrl && webResult) {
+        const w = webResult;
+        setCompanyName((prev) => coalesceProfileField(w.companyName, prev));
+        setSector((prev) => coalesceProfileField(w.sector, prev));
+        setDescription((prev) => coalesceProfileField(w.description, prev));
+        setFaqHighlights((prev) => mergeFaqHighlights(w.faqHighlights, prev));
+        setWebsitePages(w.pagesAnalyzed);
+        setWebsiteFacts(w.facts);
+        setLastSource(hadTemplateBefore ? "both" : "url");
+        setAnalysisComplete(true);
+      } else if (useUrl && !webResult) {
+        setAnalysisError(webError ?? "Échec de l’analyse du site.");
       }
     } catch (e) {
       const message =
@@ -344,7 +513,7 @@ export default function OnboardingPage() {
       setIsAnalyzing(false);
       setAnalysisKind(null);
     }
-  }, [isAnalyzing, pdfFile, siteUrl]);
+  }, [isAnalyzing, pdfFile, siteUrl, templatePillarsFound, templatePiliers.length, websiteFacts.length, websitePages.length]);
 
   const handleConfirmActivate = useCallback(async () => {
     if (isSaving) return;
@@ -361,32 +530,47 @@ export default function OnboardingPage() {
         return;
       }
 
+      const templateWarnings: string[] = [];
+      const websiteWarnings: string[] = [];
+
       if (templatePiliers.length > 0) {
-        const knowledgeResult = await saveTemplateKnowledge(templatePiliers);
-        if (knowledgeResult.ok) {
-          toast.success(
-            `Alura activée ! ${knowledgeResult.inserted} bloc${
-              knowledgeResult.inserted > 1 ? "s" : ""
-            } de connaissance indexé${knowledgeResult.inserted > 1 ? "s" : ""}.`,
-          );
-        } else {
-          toast.warning(
-            `Agent enregistré, mais indexation partielle : ${knowledgeResult.error}`,
-          );
+        const knowledgeResult = await saveTemplateKnowledge(
+          templatePiliers,
+          documentReorganizedByAi ? "document_reorganized" : "template_upload",
+        );
+        if (!knowledgeResult.ok) {
+          templateWarnings.push(knowledgeResult.error);
         }
-      } else if (websiteFacts.length > 0) {
+      }
+
+      if (websiteFacts.length > 0) {
         const knowledgeResult = await saveWebsiteKnowledge(websiteFacts);
-        if (knowledgeResult.ok) {
-          toast.success(
-            `Alura activée ! ${knowledgeResult.inserted} bloc${
-              knowledgeResult.inserted > 1 ? "s" : ""
-            } de connaissance indexé${knowledgeResult.inserted > 1 ? "s" : ""} depuis le site.`,
-          );
-        } else {
-          toast.warning(
-            `Agent enregistré, mais indexation partielle : ${knowledgeResult.error}`,
-          );
+        if (!knowledgeResult.ok) {
+          websiteWarnings.push(knowledgeResult.error);
         }
+      }
+
+      const parts: string[] = ["Alura est activée."];
+      if (templatePiliers.length > 0 && templateWarnings.length === 0) {
+        parts.push(
+          `${templatePiliers.length} Pilier${templatePiliers.length > 1 ? "s" : ""} du document indexé${templatePiliers.length > 1 ? "s" : ""}.`,
+        );
+      }
+      if (websiteFacts.length > 0 && websiteWarnings.length === 0) {
+        parts.push(
+          `${websiteFacts.length} fait${websiteFacts.length > 1 ? "s" : ""} du site web indexé${websiteFacts.length > 1 ? "s" : ""}.`,
+        );
+      }
+      if (templateWarnings.length > 0 || websiteWarnings.length > 0) {
+        toast.warning(
+          [
+            "Agent enregistré ; indexation partielle.",
+            ...templateWarnings,
+            ...websiteWarnings,
+          ].join(" "),
+        );
+      } else if (templatePiliers.length > 0 || websiteFacts.length > 0) {
+        toast.success(parts.join(" "));
       } else {
         toast.success("Alura est maintenant activée !");
       }
@@ -406,6 +590,7 @@ export default function OnboardingPage() {
     isSaving,
     router,
     sector,
+    documentReorganizedByAi,
     templatePiliers,
     websiteFacts,
   ]);
@@ -523,27 +708,30 @@ export default function OnboardingPage() {
                   Analyse terminée avec succès !
                 </p>
                 <p className="mt-1.5 max-w-sm text-center text-xs leading-relaxed text-emerald-800/80">
-                  {lastSource === "url"
-                    ? "Le profil ci-dessous a été prérempli à partir de votre site web."
-                    : "Le profil ci-dessous a été prérempli à partir de votre document."}
+                  {lastSource === "both"
+                    ? "Le profil ci-dessous combine votre document et votre site web."
+                    : lastSource === "url"
+                      ? "Le profil ci-dessous a été prérempli à partir de votre site web."
+                      : "Le profil ci-dessous a été prérempli à partir de votre document."}
                 </p>
-                {templatePillarsFound > 0 ? (
-                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[11px] font-semibold text-indigo-800">
-                    <span aria-hidden>🧭</span>
-                    Structure détectée : {templatePillarsFound} Pilier
-                    {templatePillarsFound > 1 ? "s" : ""} identifié
-                    {templatePillarsFound > 1 ? "s" : ""}
-                  </p>
-                ) : null}
-                {lastSource === "url" && websitePages.length > 0 ? (
-                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-[11px] font-semibold text-indigo-800">
-                    <span aria-hidden>🌐</span>
-                    {websitePages.length} page{websitePages.length > 1 ? "s" : ""} analysée
-                    {websitePages.length > 1 ? "s" : ""}, {websiteFacts.length} bloc
-                    {websiteFacts.length > 1 ? "s" : ""} de connaissance extrait
-                    {websiteFacts.length > 1 ? "s" : ""}
-                  </p>
-                ) : null}
+                <div className="mt-4 flex w-full max-w-md flex-col items-center gap-2">
+                  {templatePiliers.length > 0 ? (
+                    <p className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-center text-[11px] font-semibold text-indigo-800">
+                      <span aria-hidden>📄</span>
+                      {templatePiliers.length} Pilier
+                      {templatePiliers.length > 1 ? "s" : ""} extrait
+                      {templatePiliers.length > 1 ? "s" : ""} du document
+                    </p>
+                  ) : null}
+                  {websiteFacts.length > 0 ? (
+                    <p className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1.5 text-center text-[11px] font-semibold text-indigo-800">
+                      <span aria-hidden>🌐</span>
+                      {websiteFacts.length} fait
+                      {websiteFacts.length > 1 ? "s" : ""} extrait
+                      {websiteFacts.length > 1 ? "s" : ""} du site web
+                    </p>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <>
@@ -619,11 +807,11 @@ export default function OnboardingPage() {
                       accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
                       className="sr-only"
                       onChange={handleFileChange}
-                      disabled={isAnalyzing && analysisKind === "url"}
+                      disabled={isAnalyzing}
                     />
                     <label
                       htmlFor="onboarding-document"
-                      className={`block flex-1 ${isAnalyzing && analysisKind === "url" ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
+                      className={`block flex-1 ${isAnalyzing ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
                     >
                       <div
                         onDragOver={handleDragOver}
@@ -729,7 +917,7 @@ export default function OnboardingPage() {
                             placeholder="https://votre-site.com"
                             value={siteUrl}
                             onChange={(e) => setSiteUrl(e.target.value)}
-                            readOnly={isAnalyzing && analysisKind === "url"}
+                            readOnly={isAnalyzing}
                             aria-invalid={siteUrl.trim().length > 0 && !urlReady}
                             className="w-full border-0 border-b border-zinc-200/80 bg-transparent py-1.5 pr-24 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-0"
                           />
@@ -896,12 +1084,61 @@ export default function OnboardingPage() {
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: 0.08 }}
                   className="mt-3 space-y-3 text-sm leading-relaxed text-zinc-700"
                 >
-                  {templatePillarsFound > 0 ? (
+                  {documentReorganizedByAi && strategicPreview ? (
+                    <>
+                      <p className="rounded-lg border border-violet-200 bg-violet-50/80 px-3 py-2 text-xs leading-relaxed text-violet-900">
+                        <span aria-hidden>✨</span> J&apos;ai réorganisé votre
+                        document pour l&apos;adapter à ma structure stratégique.
+                        Veuillez vérifier les informations ci-dessous.
+                      </p>
+                      <p className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-500 sm:text-left">
+                        Prévisualisation
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-lg border border-zinc-200/90 bg-white p-3 text-xs shadow-sm">
+                          <p className="font-semibold text-zinc-800">
+                            1 — Identité (Nom, Mission)
+                          </p>
+                          <p className="mt-1.5 whitespace-pre-wrap text-zinc-600">
+                            {strategicPreview.identite}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-200/90 bg-white p-3 text-xs shadow-sm">
+                          <p className="font-semibold text-zinc-800">
+                            2 — Pratique (Accès, Horaires)
+                          </p>
+                          <p className="mt-1.5 whitespace-pre-wrap text-zinc-600">
+                            {strategicPreview.pratique}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-200/90 bg-white p-3 text-xs shadow-sm">
+                          <p className="font-semibold text-zinc-800">
+                            3 — Catalogue (Offres, Prix, Procédures)
+                          </p>
+                          <p className="mt-1.5 whitespace-pre-wrap text-zinc-600">
+                            {strategicPreview.catalogue}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-zinc-200/90 bg-white p-3 text-xs shadow-sm">
+                          <p className="font-semibold text-zinc-800">
+                            4 — Réclamations (Désabonnement, Escalade)
+                          </p>
+                          <p className="mt-1.5 whitespace-pre-wrap text-zinc-600">
+                            {strategicPreview.reclamations}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        Chaque bloc sera indexé avec un embedding dédié dans votre
+                        base de connaissance à la validation.
+                      </p>
+                    </>
+                  ) : templatePillarsFound > 0 ? (
                     <>
                       <p className="font-medium text-indigo-900">
-                        Structure détectée : {templatePillarsFound} Pilier
-                        {templatePillarsFound > 1 ? "s" : ""} identifié
-                        {templatePillarsFound > 1 ? "s" : ""}
+                        {templatePiliers.length} Pilier
+                        {templatePiliers.length > 1 ? "s" : ""} extrait
+                        {templatePiliers.length > 1 ? "s" : ""} du document
                       </p>
                       <ul className="space-y-1.5 text-zinc-600">
                         {templatePiliers.map((p) => (
@@ -929,13 +1166,16 @@ export default function OnboardingPage() {
                         base de connaissance à la validation.
                       </p>
                     </>
-                  ) : lastSource === "url" && websitePages.length > 0 ? (
+                  ) : null}
+                  {websitePages.length > 0 || websiteFacts.length > 0 ? (
                     <>
                       <p className="font-medium text-indigo-900">
-                        {websitePages.length} page{websitePages.length > 1 ? "s" : ""} analysée
-                        {websitePages.length > 1 ? "s" : ""}, {websiteFacts.length} bloc
-                        {websiteFacts.length > 1 ? "s" : ""} de connaissance extrait
-                        {websiteFacts.length > 1 ? "s" : ""}
+                        {websiteFacts.length} fait
+                        {websiteFacts.length > 1 ? "s" : ""} extrait
+                        {websiteFacts.length > 1 ? "s" : ""} du site web
+                        {websitePages.length > 0
+                          ? ` (${websitePages.length} page${websitePages.length > 1 ? "s" : ""} analysée${websitePages.length > 1 ? "s" : ""})`
+                          : ""}
                       </p>
                       {websitePages.length > 0 ? (
                         <ul className="flex flex-wrap gap-1.5">
@@ -981,7 +1221,11 @@ export default function OnboardingPage() {
                         base de connaissance à la validation.
                       </p>
                     </>
-                  ) : (
+                  ) : null}
+                  {templatePillarsFound === 0 &&
+                  !documentReorganizedByAi &&
+                  websitePages.length === 0 &&
+                  websiteFacts.length === 0 ? (
                     <>
                       <p className="text-emerald-900/90">
                         Points clés issus de votre FAQ (aperçu) :
@@ -1000,7 +1244,7 @@ export default function OnboardingPage() {
                         </p>
                       ) : null}
                     </>
-                  )}
+                  ) : null}
                 </motion.div>
               ) : (
                 <p className="mt-2 text-center text-sm leading-relaxed text-zinc-400 sm:text-left">

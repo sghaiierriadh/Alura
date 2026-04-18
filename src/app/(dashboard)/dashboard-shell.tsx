@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
   LayoutDashboard,
+  LogOut,
   MessageSquare,
   Settings,
   Sparkles,
@@ -11,8 +12,11 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { useState } from "react";
+
+import { createClient } from "@/lib/supabase/client";
 
 const mainNav = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -57,6 +61,40 @@ function NavLink({
   );
 }
 
+function SidebarLogout({ compact }: { compact?: boolean }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  async function handleLogout() {
+    setLoading(true);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+    setLoading(false);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void handleLogout()}
+      disabled={loading}
+      className={`flex items-center gap-2 rounded-xl text-left font-medium text-zinc-600 transition hover:bg-red-50 hover:text-red-800 dark:text-zinc-400 dark:hover:bg-red-950/40 dark:hover:text-red-200 ${
+        compact
+          ? "w-auto px-2.5 py-1.5 text-xs"
+          : "w-full gap-3 px-3 py-2.5 text-sm"
+      }`}
+    >
+      <LogOut
+        className={`shrink-0 opacity-90 ${compact ? "h-4 w-4" : "h-5 w-5"}`}
+        strokeWidth={1.75}
+        aria-hidden
+      />
+      <span>{loading ? "Déconnexion…" : "Se déconnecter"}</span>
+    </button>
+  );
+}
+
 export function DashboardShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-full flex-1 flex-col lg:flex-row">
@@ -82,6 +120,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               ))}
             </nav>
           </div>
+          <div className="mt-auto border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            <SidebarLogout />
+          </div>
         </div>
       </aside>
 
@@ -99,9 +140,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
               Alura
             </span>
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-              Espace client
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                Espace client
+              </span>
+              <div className="lg:hidden">
+                <SidebarLogout compact />
+              </div>
+            </div>
           </div>
         </header>
         <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</div>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAdminReadContext } from "@/lib/admin/server-context";
+import { createClient } from "@/lib/supabase/server";
 import { embedTextGemini, vectorToPgString } from "@/lib/ai/gemini-embedding-rest";
 
 export type AddKnowledgeFromResolutionResult = { ok: true } | { ok: false; error: string };
@@ -22,8 +23,17 @@ export async function addKnowledgeFromResolution(
     return { ok: false, error: "Question ou réponse trop courte." };
   }
 
+  const supabaseAuth = createClient();
+  const {
+    data: { user: sessionUser },
+    error: sessionErr,
+  } = await supabaseAuth.auth.getUser();
+  if (sessionErr || !sessionUser) {
+    return { ok: false, error: "Non authentifié." };
+  }
+
   const ctx = await getAdminReadContext();
-  if (!ctx) {
+  if (!ctx || ctx.userId !== sessionUser.id) {
     return { ok: false, error: "Non authentifié." };
   }
 
@@ -74,6 +84,7 @@ export async function addKnowledgeFromResolution(
 
   const { error: insErr } = await ctx.client.from("knowledge").insert({
     agent_id: agentIdForKnowledge,
+    user_id: ctx.userId,
     question: q,
     answer: a,
     source: "human_resolution",

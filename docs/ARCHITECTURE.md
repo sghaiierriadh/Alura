@@ -2,6 +2,8 @@
 
 Ce document explique le flux de donnees de la V0: de l'ingestion (PDF/URL) jusqu'au streaming de reponse dans le chat, incluant leads multi-tickets et widget iframe.
 
+Detail sur la table `knowledge`, les embeddings 768 dims et les sources (`template_upload`, `website_scraping`, `human_resolution`) : voir `DOCS/KNOWLEDGE_ARCHITECTURE.md` a la racine du depot.
+
 ## 1) Ingestion des connaissances
 
 ### Option A - PDF

@@ -14,16 +14,6 @@ export type SaveMessageInput = {
 
 export type SaveMessageResult = { ok: true } | { ok: false; error: string };
 
-function getPocUserId(): string | null {
-  const raw = process.env.POC_SAVE_AGENT_USER_ID?.trim();
-  if (!raw) return null;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    raw,
-  )
-    ? raw
-    : null;
-}
-
 export async function saveMessage(input: SaveMessageInput): Promise<SaveMessageResult> {
   const sessionId = input.sessionId.trim();
   const agentId = input.agentId.trim();
@@ -42,68 +32,58 @@ export async function saveMessage(input: SaveMessageInput): Promise<SaveMessageR
     return { ok: false, error: "role invalide." };
   }
 
-  const pocUserId = getPocUserId();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const row = {
+    session_id: sessionId,
+    agent_id: agentId,
+    role: input.role,
+    content,
+  };
 
-  if (pocUserId && serviceKey) {
-    const admin = createServiceRoleClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceKey,
-    );
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    const { data: ownedAgent, error: ownedAgentError } = await admin
+  if (user) {
+    const { data: ownedAgent, error: ownedAgentError } = await supabase
       .from("agents")
       .select("id")
       .eq("id", agentId)
-      .eq("user_id", pocUserId)
+      .eq("user_id", user.id)
       .maybeSingle();
 
     if (ownedAgentError || !ownedAgent) {
       return { ok: false, error: "Agent introuvable." };
     }
 
-    const { error } = await admin.from("messages").insert({
-      session_id: sessionId,
-      agent_id: agentId,
-      role: input.role,
-      content,
-    });
-
+    const { error } = await supabase.from("messages").insert(row);
     if (error) {
       return { ok: false, error: error.message };
     }
-
     return { ok: true };
   }
 
-  const supabase = createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceKey) {
     return { ok: false, error: "Vous devez être connecté." };
   }
 
-  const { data: ownedAgent, error: ownedAgentError } = await supabase
+  const admin = createServiceRoleClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceKey,
+  );
+
+  const { data: agent, error: agentErr } = await admin
     .from("agents")
     .select("id")
     .eq("id", agentId)
-    .eq("user_id", user.id)
     .maybeSingle();
 
-  if (ownedAgentError || !ownedAgent) {
+  if (agentErr || !agent) {
     return { ok: false, error: "Agent introuvable." };
   }
 
-  const { error } = await supabase.from("messages").insert({
-    session_id: sessionId,
-    agent_id: agentId,
-    role: input.role,
-    content,
-  });
-
+  const { error } = await admin.from("messages").insert(row);
   if (error) {
     return { ok: false, error: error.message };
   }

@@ -1,5 +1,5 @@
 /**
- * Parseur du template FAQ Stratégique Alura.
+ * Parseur du template FAQ Stratégique Alura (**parsing par Piliers**).
  *
  * Détecte les sections « PILIER 1..4 » dans le texte extrait (PDF ou DOCX) et
  * en isole :
@@ -34,6 +34,7 @@ const PILIER_HEADER_RE =
 
 const LABEL_STOP_RE = /^[A-Za-zÀ-ÖØ-öø-ÿ][^:\n]{0,80}\s*:/;
 
+/** Nettoie une ligne extraite (underscores, espaces) et rejette les lignes purement placeholder. */
 function cleanPlaceholder(raw: string): string {
   const v = raw.replace(/_{2,}/g, " ").replace(/\s+/g, " ").trim();
   if (!v) return "";
@@ -42,6 +43,10 @@ function cleanPlaceholder(raw: string): string {
   return v;
 }
 
+/**
+ * Après la première ligne qui matche `labelRegex`, concatène les lignes suivantes
+ * jusqu’à un nouveau label, une ligne « Exemple : », ou une ligne vide.
+ */
 function extractAfterLabel(body: string, labelRegex: RegExp): string {
   const lines = body.split(/\r?\n/).map((l) => l.trim());
   for (let i = 0; i < lines.length; i++) {
@@ -66,6 +71,7 @@ function extractAfterLabel(body: string, labelRegex: RegExp): string {
   return "";
 }
 
+/** Extrait les URLs http(s) uniques d’un bloc de texte (ex. pilier Liens). */
 function extractUrlsFromBlock(body: string): string[] {
   const matches = body.match(/https?:\/\/[^\s)\]<>"']+/gi) ?? [];
   const cleaned = matches
@@ -74,6 +80,10 @@ function extractUrlsFromBlock(body: string): string[] {
   return Array.from(new Set(cleaned));
 }
 
+/**
+ * Découpe le document sur les en-têtes `PILIER 1..4` (regex insensible à la casse).
+ * Ne conserve qu’**une occurrence par numéro** (première rencontrée dans l’ordre du fichier).
+ */
 function splitPillars(text: string): Array<{
   index: 1 | 2 | 3 | 4;
   title: string;
@@ -126,7 +136,10 @@ function splitPillars(text: string): Array<{
   return results;
 }
 
-/** Parse le texte brut d'un document Alura (PDF/DOCX) et isole la structure Piliers. */
+/**
+ * Point d’entrée : agrège sections, blocs `PillarBlock`, et champs profil
+ * (`companyName`, `mission`, `hours`, `links`).
+ */
 export function parsePillarsFromText(rawText: string): ParsedTemplate {
   const text = (rawText ?? "").replace(/\r\n/g, "\n");
   const sections = splitPillars(text);

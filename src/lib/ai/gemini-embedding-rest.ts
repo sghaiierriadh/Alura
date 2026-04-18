@@ -1,4 +1,7 @@
-/** Dimensions attendues par `public.knowledge.embedding vector(768)`. */
+/**
+ * Dimensions attendues par `public.knowledge.embedding vector(768)`.
+ * Variables d’environnement : voir `src/lib/gemini.ts`.
+ */
 const EXPECTED_DIM = 768;
 
 type ApiVer = "v1" | "v1beta";

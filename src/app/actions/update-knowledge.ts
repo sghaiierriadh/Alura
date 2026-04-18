@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 
 import {
@@ -9,42 +8,20 @@ import {
   toFaqJsonb,
   type FaqPair,
 } from "@/lib/knowledge/faq-data";
-import type { Database } from "@/types/database.types";
 
 export type KnowledgeActionResult =
   | { ok: true; items: FaqPair[] }
   | { ok: false; error: string };
 
-function getPocUserId(): string | null {
-  const raw = process.env.POC_SAVE_AGENT_USER_ID?.trim();
-  if (!raw) return null;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    raw,
-  )
-    ? raw
-    : null;
-}
-
-type WriteCtx =
-  | { mode: "poc"; client: ReturnType<typeof createServiceRoleClient<Database>>; userId: string }
-  | { mode: "session"; client: ReturnType<typeof createClient>; userId: string };
+type WriteCtx = { client: ReturnType<typeof createClient>; userId: string };
 
 async function getWriteContext(): Promise<WriteCtx | null> {
-  const pocUserId = getPocUserId();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (pocUserId && serviceKey) {
-    const client = createServiceRoleClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceKey,
-    );
-    return { mode: "poc", client, userId: pocUserId };
-  }
   const client = createClient();
   const {
     data: { user },
   } = await client.auth.getUser();
   if (!user) return null;
-  return { mode: "session", client, userId: user.id };
+  return { client, userId: user.id };
 }
 
 async function readFaqPairs(ctx: WriteCtx): Promise<FaqPair[]> {

@@ -153,6 +153,7 @@ export type Database = {
         Row: {
           id: string;
           agent_id: string;
+          user_id: string;
           question: string;
           answer: string;
           source: string;
@@ -163,6 +164,7 @@ export type Database = {
         Insert: {
           id?: string;
           agent_id: string;
+          user_id: string;
           question: string;
           answer: string;
           source?: string;
@@ -172,6 +174,7 @@ export type Database = {
         Update: {
           id?: string;
           agent_id?: string;
+          user_id?: string;
           question?: string;
           answer?: string;
           source?: string;

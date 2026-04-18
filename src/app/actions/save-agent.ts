@@ -1,11 +1,8 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-
-import type { Database } from "@/types/database.types";
 
 export type SaveAgentSuccess = { ok: true };
 export type SaveAgentFailure = { ok: false; error: string };
@@ -18,44 +15,8 @@ export type SaveAgentInput = {
   faqHighlights: string[];
 };
 
-function getPocUserId(): string | null {
-  const raw = process.env.POC_SAVE_AGENT_USER_ID?.trim();
-  if (!raw) return null;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    raw,
-  )
-    ? raw
-    : null;
-}
-
 export async function saveAgent(input: SaveAgentInput): Promise<SaveAgentResult> {
   try {
-    const pocUserId = getPocUserId();
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-
-    if (pocUserId && serviceKey) {
-      const admin = createServiceRoleClient<Database>(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        serviceKey,
-      );
-      const { error } = await admin.from("agents").upsert(
-        {
-          user_id: pocUserId,
-          company_name: input.companyName,
-          sector: input.sector,
-          description: input.description,
-          faq_data: input.faqHighlights,
-        },
-        { onConflict: "user_id" },
-      );
-      if (error) {
-        return { ok: false, error: error.message };
-      }
-      revalidatePath("/dashboard");
-      revalidatePath("/onboarding");
-      return { ok: true };
-    }
-
     const supabase = createClient();
     const {
       data: { user },

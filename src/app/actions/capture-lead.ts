@@ -32,17 +32,18 @@ export type AddLeadComplaintResult =
   | { ok: true; leadId: string; complaintId?: string; complaintText?: string; skipped?: boolean }
   | { ok: false; error: string };
 
-function getPocUserId(): string | null {
-  const raw = process.env.POC_SAVE_AGENT_USER_ID?.trim();
-  if (!raw) return null;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    raw,
-  )
-    ? raw
-    : null;
-}
-
 const LEAD_SOURCES = new Set(["widget", "embed", "dashboard", "api", "unknown"]);
+
+function getServiceRoleAdmin(): ReturnType<
+  typeof createServiceRoleClient<Database>
+> | null {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceKey) return null;
+  return createServiceRoleClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceKey,
+  );
+}
 
 /**
  * Valeur stockée en base (snake_case / minuscules). Défaut **widget** si non fourni (nouveaux leads).
@@ -75,27 +76,25 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     return { ok: false, error: "Email ou téléphone requis." };
   }
 
-  const pocUserId = getPocUserId();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
 
-  if (pocUserId && serviceKey) {
-    const admin = createServiceRoleClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceKey,
-    );
-
-    const { data: ownedAgent, error: ownedAgentError } = await admin
+  if (!authError && user) {
+    const { data: ownedAgent, error: ownedAgentError } = await supabase
       .from("agents")
       .select("id")
       .eq("id", agentId)
-      .eq("user_id", pocUserId)
+      .eq("user_id", user.id)
       .maybeSingle();
 
     if (ownedAgentError || !ownedAgent) {
       return { ok: false, error: "Agent introuvable." };
     }
 
-    const { data: inserted, error } = await admin
+    const { data: inserted, error } = await supabase
       .from("leads")
       .insert({
         agent_id: agentId,
@@ -114,7 +113,9 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     }
 
     if (isMeaningfulComplaint(lastQuestion)) {
-      const { error: complaintErr } = await admin.from("lead_complaints").insert({
+      const admin = getServiceRoleAdmin();
+      const complaintClient = admin ?? supabase;
+      const { error: complaintErr } = await complaintClient.from("lead_complaints").insert({
         lead_id: inserted.id,
         content: lastQuestion,
         status: "open",
@@ -128,28 +129,27 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     return { ok: true, leadId: inserted.id };
   }
 
-  const supabase = createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!serviceKey) {
     return { ok: false, error: "Vous devez être connecté." };
   }
 
-  const { data: ownedAgent, error: ownedAgentError } = await supabase
+  const admin = createServiceRoleClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceKey,
+  );
+
+  const { data: agentRow, error: agentErr } = await admin
     .from("agents")
     .select("id")
     .eq("id", agentId)
-    .eq("user_id", user.id)
     .maybeSingle();
 
-  if (ownedAgentError || !ownedAgent) {
+  if (agentErr || !agentRow) {
     return { ok: false, error: "Agent introuvable." };
   }
 
-  const { data: inserted, error } = await supabase
+  const { data: inserted, error } = await admin
     .from("leads")
     .insert({
       agent_id: agentId,
@@ -168,7 +168,7 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
   }
 
   if (isMeaningfulComplaint(lastQuestion)) {
-    const { error: complaintErr } = await supabase.from("lead_complaints").insert({
+    const { error: complaintErr } = await admin.from("lead_complaints").insert({
       lead_id: inserted.id,
       content: lastQuestion,
       status: "open",
@@ -213,15 +213,21 @@ export async function addLeadComplaint(
 
   const complaintPriority = toDbComplaintPriority(input.priority);
 
-  const pocUserId = getPocUserId();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const admin = getServiceRoleAdmin();
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
 
-  if (pocUserId && serviceKey) {
-    const admin = createServiceRoleClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceKey,
-    );
+  const insertPayload = {
+    lead_id: leadId,
+    content: lastQuestion,
+    status: "open" as const,
+    priority: complaintPriority,
+  };
 
+  if (admin) {
     const { data: row, error: fetchErr } = await admin
       .from("leads")
       .select("id, agent_id")
@@ -233,25 +239,9 @@ export async function addLeadComplaint(
       return { ok: false, error: "Lead introuvable." };
     }
 
-    const { data: ownedAgent, error: ownedAgentError } = await admin
-      .from("agents")
-      .select("id")
-      .eq("id", agentId)
-      .eq("user_id", pocUserId)
-      .maybeSingle();
-
-    if (ownedAgentError || !ownedAgent) {
-      return { ok: false, error: "Agent introuvable." };
-    }
-
     const { data: insertedComplaint, error: insertErr } = await admin
       .from("lead_complaints")
-      .insert({
-        lead_id: leadId,
-        content: lastQuestion,
-        status: "open",
-        priority: complaintPriority,
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
 
@@ -272,12 +262,6 @@ export async function addLeadComplaint(
       complaintText: lastQuestion,
     };
   }
-
-  const supabase = createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
 
   if (authError || !user) {
     return { ok: false, error: "Vous devez être connecté." };
@@ -307,12 +291,7 @@ export async function addLeadComplaint(
 
   const { data: insertedComplaint, error: insertErr } = await supabase
     .from("lead_complaints")
-    .insert({
-      lead_id: leadId,
-      content: lastQuestion,
-      status: "open",
-      priority: complaintPriority,
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 

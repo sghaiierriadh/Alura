@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAdminReadContext } from "@/lib/admin/server-context";
+import { createClient } from "@/lib/supabase/server";
 import { embedTextGemini, vectorToPgString } from "@/lib/ai/gemini-embedding-rest";
 import type { CuratedFact } from "@/lib/ingestion/website-scraper";
 
@@ -33,8 +34,17 @@ export async function saveWebsiteKnowledge(
     return { ok: false, error: "Aucun fait exploitable à indexer." };
   }
 
+  const supabaseAuth = createClient();
+  const {
+    data: { user: sessionUser },
+    error: sessionErr,
+  } = await supabaseAuth.auth.getUser();
+  if (sessionErr || !sessionUser) {
+    return { ok: false, error: "Non authentifié." };
+  }
+
   const ctx = await getAdminReadContext();
-  if (!ctx) {
+  if (!ctx || ctx.userId !== sessionUser.id) {
     return { ok: false, error: "Non authentifié." };
   }
 
@@ -66,6 +76,7 @@ export async function saveWebsiteKnowledge(
 
   const rows: Array<{
     agent_id: string;
+    user_id: string;
     question: string;
     answer: string;
     source: string;
@@ -87,6 +98,7 @@ export async function saveWebsiteKnowledge(
     }
     rows.push({
       agent_id: agent.id,
+      user_id: ctx.userId,
       question: topic,
       answer: content,
       source: SOURCE,
