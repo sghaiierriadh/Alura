@@ -13,6 +13,8 @@ export type SaveAgentInput = {
   sector: string;
   description: string;
   faqHighlights: string[];
+  /** URL ou domaine du site client (recherche live côté chat). Chaîne vide = effacer. */
+  websiteUrl?: string | null;
 };
 
 export async function saveAgent(input: SaveAgentInput): Promise<SaveAgentResult> {
@@ -54,6 +56,12 @@ export async function saveAgent(input: SaveAgentInput): Promise<SaveAgentResult>
       };
     }
 
+    const websiteUrl =
+      input.websiteUrl === undefined
+        ? undefined
+        : (typeof input.websiteUrl === "string" ? input.websiteUrl.trim() : "") ||
+          null;
+
     const { error } = await supabase.from("agents").upsert(
       {
         user_id: user.id,
@@ -61,6 +69,7 @@ export async function saveAgent(input: SaveAgentInput): Promise<SaveAgentResult>
         sector: input.sector,
         description: input.description,
         faq_data: input.faqHighlights,
+        ...(websiteUrl !== undefined ? { website_url: websiteUrl } : {}),
       },
       { onConflict: "user_id" },
     );

@@ -524,6 +524,7 @@ export default function OnboardingPage() {
         sector,
         description,
         faqHighlights,
+        websiteUrl: siteUrl.trim() || null,
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -590,6 +591,7 @@ export default function OnboardingPage() {
     isSaving,
     router,
     sector,
+    siteUrl,
     documentReorganizedByAi,
     templatePiliers,
     websiteFacts,

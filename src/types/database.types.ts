@@ -22,6 +22,11 @@ export type Database = {
           sector: string | null;
           description: string | null;
           faq_data: Json | null;
+          website_url: string | null;
+          /** URL HTTPS du système client (POST, corps JSON `{ "query": "..." }`). */
+          api_endpoint: string | null;
+          /** Clé secrète envoyée en en-tête `X-Api-Key` si renseignée. */
+          api_key: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -32,6 +37,9 @@ export type Database = {
           sector?: string | null;
           description?: string | null;
           faq_data?: Json | null;
+          website_url?: string | null;
+          api_endpoint?: string | null;
+          api_key?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -42,10 +50,56 @@ export type Database = {
           sector?: string | null;
           description?: string | null;
           faq_data?: Json | null;
+          website_url?: string | null;
+          api_endpoint?: string | null;
+          api_key?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Relationships: [];
+      };
+      business_records: {
+        Row: {
+          id: string;
+          agent_id: string;
+          title: string;
+          description: string | null;
+          value: string | null;
+          category: string | null;
+          metadata: Json | null;
+          /** Colonne `tsvector` pour `.textSearch('search_vector', …)` (PostgREST). */
+          search_vector: unknown;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          title: string;
+          description?: string | null;
+          value?: string | null;
+          category?: string | null;
+          metadata?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          title?: string;
+          description?: string | null;
+          value?: string | null;
+          category?: string | null;
+          metadata?: Json | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "business_records_agent_id_fkey";
+            columns: ["agent_id"];
+            isOneToOne: false;
+            referencedRelation: "agents";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       leads: {
         Row: {

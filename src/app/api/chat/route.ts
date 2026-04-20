@@ -1,4 +1,7 @@
 import { addLeadComplaint } from "@/app/actions/capture-lead";
+import { liveSearch } from "@/app/actions/live-search";
+import { callClientApi } from "@/app/actions/call-client-api";
+import { searchRecords } from "@/app/actions/search-records";
 import { buildComplaintTextForTicket } from "@/lib/ai/complaint-text";
 import { saveMessage } from "@/app/actions/save-message";
 import { fetchAgentByIdForChat } from "@/lib/agents/fetch-agent-chat";
@@ -9,8 +12,12 @@ import {
   hasLeadFormTrigger,
   stripLeadFormTrigger,
 } from "@/lib/ai/lead-form-trigger";
+import { buildChatGeminiTools } from "@/lib/ai/chat-gemini-tools";
+import { LIVE_SEARCH_TOOL_NAME } from "@/lib/ai/live-search-gemini-tool";
+import { SEARCH_RECORDS_TOOL_NAME } from "@/lib/ai/business-records-tool";
+import { CALL_EXPERT_API_TOOL_NAME } from "@/lib/ai/client-api-tool";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { Content } from "@google/generative-ai";
+import type { Content, Part } from "@google/generative-ai";
 
 /** Escalade lead : le modèle ajoute en fin de réponse le marqueur `LEAD_FORM_TRIGGER` (voir `src/lib/ai/lead-form-trigger.ts`). Le client le détecte sur le flux brut puis masque ce marqueur à l’affichage. */
 
@@ -206,6 +213,11 @@ export async function POST(req: Request) {
 
   const companyName = agent.company_name ?? "—";
   const retrievedKnowledgeFaq = await fetchKnowledgeMatchesForChat(agentId, message);
+  const websiteBaseForLive = (agent.website_url ?? "").trim();
+  const liveSearchEnabledForAgent =
+    Boolean(process.env.SERPER_API_KEY?.trim()) && websiteBaseForLive.length > 0;
+  const expertApiEnabledForAgent = Boolean((agent.api_endpoint ?? "").trim());
+
   const systemInstruction = buildAluraSystemInstruction(
     companyName,
     agent.description,
@@ -217,6 +229,9 @@ export async function POST(req: Request) {
           ? userFirstName
           : null,
       retrievedKnowledgeFaq,
+      catalogSearchEnabled: true,
+      expertApiEnabled: expertApiEnabledForAgent,
+      liveSearchEnabled: liveSearchEnabledForAgent,
     },
   );
 
@@ -228,77 +243,150 @@ export async function POST(req: Request) {
 
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  async function streamWithModel(modelName: string) {
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction,
-    });
-    const chat = model.startChat({ history });
-    return chat.sendMessageStream(message);
-  }
-
-  let streamResult: Awaited<ReturnType<typeof streamWithModel>>;
-  try {
-    console.log("[api/chat] Gemini Call...", { model: primaryModel });
-    streamResult = await streamGeminiOnceWith503Retry(() =>
-      streamWithModel(primaryModel),
-    );
-    console.log("[api/chat] Gemini Call... stream obtained");
-  } catch (firstErr) {
-    if (
-      primaryModel === DEFAULT_MODEL &&
-      isLikelyModelNotFoundError(firstErr)
-    ) {
-      try {
-        console.log("[api/chat] Gemini Call... (fallback)", {
-          model: FALLBACK_MODEL,
-        });
-        streamResult = await streamGeminiOnceWith503Retry(() =>
-          streamWithModel(FALLBACK_MODEL),
-        );
-        modelUsedForChat = FALLBACK_MODEL;
-        console.log("[api/chat] Gemini Call... stream obtained (fallback)");
-      } catch (fallbackErr) {
-        if (isServiceUnavailableError(fallbackErr)) {
-          return Response.json(
-            { error: SERVICE_UNAVAILABLE_MESSAGE },
-            { status: 503 },
-          );
-        }
-        const msg =
-          fallbackErr instanceof Error
-            ? fallbackErr.message
-            : "Erreur modèle IA.";
-        return Response.json({ error: msg }, { status: 502 });
-      }
-    } else if (isServiceUnavailableError(firstErr)) {
-      return Response.json(
-        { error: SERVICE_UNAVAILABLE_MESSAGE },
-        { status: 503 },
-      );
-    } else {
-      const msg =
-        firstErr instanceof Error ? firstErr.message : "Erreur modèle IA.";
-      return Response.json({ error: msg }, { status: 502 });
-    }
-  }
-
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let accumulated = "";
+      const sendText = (t: string) => {
+        if (!t) return;
+        accumulated += t;
+        controller.enqueue(encoder.encode(t));
+      };
+
+      async function runGeminiForModel(modelName: string): Promise<void> {
+        const toolPack = buildChatGeminiTools({
+          includeSearchRecords: true,
+          includeExpertApi: expertApiEnabledForAgent,
+          includeLiveSearch: liveSearchEnabledForAgent,
+        });
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction,
+          ...(toolPack ? { tools: toolPack.tools } : {}),
+        });
+        const chat = model.startChat({ history });
+
+        const streamOneRound = async (
+          payload: string | Part[],
+          forwardToClient: boolean,
+        ) => {
+          const sr = await streamGeminiOnceWith503Retry(() =>
+            chat.sendMessageStream(payload),
+          );
+          for await (const chunk of sr.stream) {
+            const text =
+              typeof (chunk as { text?: () => string }).text === "function"
+                ? (chunk as { text: () => string }).text()
+                : "";
+            if (text && forwardToClient) sendText(text);
+          }
+          return sr.response;
+        };
+
+        const MAX_TOOL_ROUNDS = 6;
+        let toolSteps = 0;
+        let resp = await streamOneRound(message, true);
+        let calls = resp.functionCalls();
+        while (calls && calls.length > 0 && toolSteps < MAX_TOOL_ROUNDS) {
+          toolSteps += 1;
+          const functionParts: Part[] = [];
+          for (const call of calls) {
+            if (call.name === SEARCH_RECORDS_TOOL_NAME) {
+              const args = call.args as Record<string, unknown>;
+              const q =
+                typeof args.query === "string"
+                  ? args.query
+                  : typeof args.q === "string"
+                    ? args.q
+                    : "";
+              const sr = await searchRecords(agentId, q);
+              functionParts.push({
+                functionResponse: {
+                  name: call.name,
+                  response: sr.success
+                    ? { records: sr.records }
+                    : { records: [], error: sr.error },
+                },
+              });
+            } else if (call.name === CALL_EXPERT_API_TOOL_NAME) {
+              const args = call.args as Record<string, unknown>;
+              const q =
+                typeof args.query === "string"
+                  ? args.query
+                  : typeof args.q === "string"
+                    ? args.q
+                    : "";
+              const apiRes = await callClientApi(agentId, q);
+              functionParts.push({
+                functionResponse: {
+                  name: call.name,
+                  response: apiRes.success
+                    ? { data: apiRes.data }
+                    : { data: null, error: apiRes.error },
+                },
+              });
+            } else if (call.name === LIVE_SEARCH_TOOL_NAME) {
+              const args = call.args as Record<string, unknown>;
+              const q =
+                typeof args.query === "string"
+                  ? args.query
+                  : typeof args.q === "string"
+                    ? args.q
+                    : "";
+              const lr = await liveSearch(q, websiteBaseForLive);
+              functionParts.push({
+                functionResponse: {
+                  name: call.name,
+                  response: lr.ok
+                    ? { snippets: lr.snippets }
+                    : { snippets: [], error: lr.error },
+                },
+              });
+            } else {
+              functionParts.push({
+                functionResponse: {
+                  name: call.name,
+                  response: { error: "Outil non pris en charge." },
+                },
+              });
+            }
+          }
+          resp = await streamOneRound(functionParts, true);
+          calls = resp.functionCalls();
+        }
+      }
+
       try {
-        for await (const chunk of streamResult.stream) {
-          const text =
-            typeof (chunk as { text?: () => string }).text === "function"
-              ? (chunk as { text: () => string }).text()
-              : "";
-          if (text) {
-            accumulated += text;
-            controller.enqueue(encoder.encode(text));
+        console.log("[api/chat] Gemini Call...", { model: primaryModel });
+        modelUsedForChat = primaryModel;
+        try {
+          await runGeminiForModel(primaryModel);
+        } catch (firstErr) {
+          if (
+            primaryModel === DEFAULT_MODEL &&
+            isLikelyModelNotFoundError(firstErr)
+          ) {
+            console.log("[api/chat] Gemini Call... (fallback)", {
+              model: FALLBACK_MODEL,
+            });
+            modelUsedForChat = FALLBACK_MODEL;
+            try {
+              await runGeminiForModel(FALLBACK_MODEL);
+            } catch (fallbackErr) {
+              if (isServiceUnavailableError(fallbackErr)) {
+                sendText(SERVICE_UNAVAILABLE_MESSAGE);
+              } else {
+                throw fallbackErr;
+              }
+            }
+          } else if (isServiceUnavailableError(firstErr)) {
+            sendText(SERVICE_UNAVAILABLE_MESSAGE);
+          } else {
+            throw firstErr;
           }
         }
+        console.log("[api/chat] Gemini stream done");
 
         const assistantPlain = stripLeadFormTrigger(accumulated).trim();
         if (assistantPlain.length > 0) {

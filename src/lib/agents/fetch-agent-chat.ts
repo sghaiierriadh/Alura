@@ -5,7 +5,13 @@ import type { Database } from "@/types/database.types";
 
 export type AgentChatRow = Pick<
   Database["public"]["Tables"]["agents"]["Row"],
-  "id" | "user_id" | "company_name" | "description" | "faq_data"
+  | "id"
+  | "user_id"
+  | "company_name"
+  | "description"
+  | "faq_data"
+  | "website_url"
+  | "api_endpoint"
 >;
 
 const UUID_RE =
@@ -28,7 +34,7 @@ export async function fetchAgentByIdForChat(
   if (user) {
     const { data, error } = await supabase
       .from("agents")
-      .select("id, user_id, company_name, description, faq_data")
+      .select("id, user_id, company_name, description, faq_data, website_url, api_endpoint")
       .eq("id", agentId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -45,7 +51,7 @@ export async function fetchAgentByIdForChat(
   );
   const { data, error } = await admin
     .from("agents")
-    .select("id, user_id, company_name, description, faq_data")
+    .select("id, user_id, company_name, description, faq_data, website_url, api_endpoint")
     .eq("id", agentId)
     .maybeSingle();
   if (error) return null;
