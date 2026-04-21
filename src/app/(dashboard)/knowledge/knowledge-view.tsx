@@ -5,18 +5,47 @@ import {
   deleteKnowledgePair,
   updateKnowledgePair,
 } from "@/app/actions/update-knowledge";
+import { LearningCenter } from "@/components/dashboard/LearningCenter";
+import type { BusinessRecordListRow } from "@/lib/knowledge/fetch-business-records";
 import type { FaqPair } from "@/lib/knowledge/faq-data";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+type MainTab = "faq" | "catalogue";
+
 type Props = {
+  agentId: string;
   companyName: string;
   description: string;
   initialFaq: FaqPair[];
   /** Entrées `knowledge` avec `source = human_resolution` (résolution tickets). */
   learnedFromTickets: FaqPair[];
+  businessRecords: BusinessRecordListRow[];
 };
+
+function formatMetadataCell(
+  metadata: BusinessRecordListRow["metadata"],
+): string {
+  if (metadata == null) return "—";
+  try {
+    const s = JSON.stringify(metadata);
+    return s.length > 96 ? `${s.slice(0, 96)}…` : s;
+  } catch {
+    return "—";
+  }
+}
+
+function formatRecordDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("fr-FR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
 
 function EditDialog({
   title,
@@ -125,11 +154,14 @@ function EditDialog({
 }
 
 export function KnowledgeView({
+  agentId,
   companyName,
   description,
   initialFaq,
   learnedFromTickets,
+  businessRecords,
 }: Props) {
+  const [mainTab, setMainTab] = useState<MainTab>("faq");
   const [items, setItems] = useState<FaqPair[]>(initialFaq);
   const [learned, setLearned] = useState<FaqPair[]>(learnedFromTickets);
 
@@ -228,6 +260,125 @@ export function KnowledgeView({
         )}
       </header>
 
+      <div
+        className="mt-8 flex flex-wrap gap-2 border-b border-zinc-200/80 pb-px dark:border-zinc-800"
+        role="tablist"
+        aria-label="Sections base de connaissance"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mainTab === "faq"}
+          onClick={() => setMainTab("faq")}
+          className={`rounded-t-lg px-4 py-2.5 text-sm font-medium transition ${
+            mainTab === "faq"
+              ? "border border-b-0 border-zinc-200/90 bg-white text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              : "border border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          FAQ & base
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mainTab === "catalogue"}
+          onClick={() => setMainTab("catalogue")}
+          className={`rounded-t-lg px-4 py-2.5 text-sm font-medium transition ${
+            mainTab === "catalogue"
+              ? "border border-b-0 border-zinc-200/90 bg-white text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              : "border border-transparent text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          Catalogue & Données
+        </button>
+      </div>
+
+      {mainTab === "catalogue" ? (
+        <section className="mt-10 space-y-10" aria-labelledby="catalogue-donnees-heading">
+          <div>
+            <h2
+              id="catalogue-donnees-heading"
+              className="text-sm font-semibold text-zinc-800 dark:text-zinc-200"
+            >
+              Catalogue & Données
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+              Import CSV et fiches validées depuis le centre d’apprentissage : suivi des suggestions
+              et lecture des enregistrements <span className="font-mono text-zinc-600 dark:text-zinc-300">business_records</span>.
+            </p>
+          </div>
+          <LearningCenter agentId={agentId} />
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Enregistrements métier
+            </h3>
+            <div className="mt-4 overflow-x-auto rounded-2xl border border-zinc-200/90 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+              {businessRecords.length === 0 ? (
+                <p className="p-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                  Aucun enregistrement pour l’instant. Importez un CSV depuis{" "}
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">Paramètres</span>{" "}
+                  (données structurées) ou validez une suggestion en fiche métier.
+                </p>
+              ) : (
+                <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200/90 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-900/40">
+                      <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-200">
+                        Titre
+                      </th>
+                      <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-200">
+                        Description
+                      </th>
+                      <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-200">
+                        Valeur
+                      </th>
+                      <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-200">
+                        Catégorie
+                      </th>
+                      <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-200">
+                        Métadonnées
+                      </th>
+                      <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-200">
+                        Créé le
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {businessRecords.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/80"
+                      >
+                        <td className="max-w-[180px] px-4 py-3 align-top font-medium text-zinc-900 dark:text-zinc-100">
+                          <span className="line-clamp-3">{row.title || "—"}</span>
+                        </td>
+                        <td className="max-w-[220px] px-4 py-3 align-top text-zinc-600 dark:text-zinc-400">
+                          <span className="line-clamp-4">{row.description?.trim() || "—"}</span>
+                        </td>
+                        <td className="max-w-[140px] px-4 py-3 align-top text-zinc-600 dark:text-zinc-400">
+                          <span className="line-clamp-3">{row.value?.trim() || "—"}</span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-600 dark:text-zinc-400">
+                          {row.category?.trim() || "—"}
+                        </td>
+                        <td className="max-w-[200px] px-4 py-3 align-top font-mono text-xs text-zinc-500 dark:text-zinc-500">
+                          {formatMetadataCell(row.metadata)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-500 dark:text-zinc-500">
+                          {formatRecordDate(row.created_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {mainTab === "faq" ? (
+        <>
       {learned.length > 0 ? (
         <section className="mt-10">
           <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
@@ -394,6 +545,8 @@ export function KnowledgeView({
           />
         ) : null}
       </AnimatePresence>
+        </>
+      ) : null}
     </div>
   );
 }

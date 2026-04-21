@@ -1,4 +1,5 @@
 import { addLeadComplaint } from "@/app/actions/capture-lead";
+import { saveLearningSuggestion } from "@/app/actions/save-learning-suggestion";
 import { liveSearch } from "@/app/actions/live-search";
 import { callClientApi } from "@/app/actions/call-client-api";
 import { searchRecords } from "@/app/actions/search-records";
@@ -248,6 +249,7 @@ export async function POST(req: Request) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let accumulated = "";
+      let liveSearchSucceededThisTurn = false;
       const sendText = (t: string) => {
         if (!t) return;
         accumulated += t;
@@ -335,6 +337,20 @@ export async function POST(req: Request) {
                     ? args.q
                     : "";
               const lr = await liveSearch(q, websiteBaseForLive);
+              const hasUsableSnippet =
+                lr.ok && lr.snippets.length > 0;
+              if (hasUsableSnippet) {
+                liveSearchSucceededThisTurn = true;
+              }
+              console.log(
+                ">>> [LEARNING] liveSearch tool round",
+                JSON.stringify({
+                  ok: lr.ok,
+                  snippetCount: lr.ok ? lr.snippets.length : 0,
+                  hasUsableSnippet,
+                  liveSearchSucceededThisTurn,
+                }),
+              );
               functionParts.push({
                 functionResponse: {
                   name: call.name,
@@ -399,6 +415,79 @@ export async function POST(req: Request) {
           if (!assistantSave.ok) {
             console.error("[api/chat] save assistant message:", assistantSave.error);
           }
+        }
+
+        let forcedLiveSearchHit = false;
+        const keywordLearningBoost =
+          /\b(partenaire|avantage)\b/i.test(message) &&
+          liveSearchEnabledForAgent;
+        if (keywordLearningBoost && !liveSearchSucceededThisTurn) {
+          const lrForce = await liveSearch(
+            message.trim().slice(0, 500),
+            websiteBaseForLive,
+          );
+          forcedLiveSearchHit = lrForce.ok && lrForce.snippets.length > 0;
+          console.log(
+            ">>> [LEARNING] forçage liveSearch (mots-clés partenaire|avantage)",
+            JSON.stringify({
+              ok: lrForce.ok,
+              snippetCount: lrForce.ok ? lrForce.snippets.length : 0,
+              forcedLiveSearchHit,
+            }),
+          );
+        }
+
+        const learningSearchSucceeded =
+          liveSearchSucceededThisTurn || forcedLiveSearchHit;
+
+        console.log(
+          ">>> [LEARNING] Fin de tour — état avant sauvegarde suggestion",
+          JSON.stringify({
+            liveSearchSucceededThisTurn,
+            forcedLiveSearchHit,
+            learningSearchSucceeded,
+            assistantPlainLen: assistantPlain.length,
+            messageLen: message.trim().length,
+            agentId,
+          }),
+        );
+
+        if (
+          learningSearchSucceeded &&
+          assistantPlain.length > 0 &&
+          message.trim().length > 0
+        ) {
+          console.log(
+            ">>> [LEARNING] Tentative de sauvegarde synchrone (await saveLearningSuggestion)...",
+          );
+          try {
+            const learnRes = await saveLearningSuggestion({
+              agentId,
+              userQuestion: message,
+              suggestedAnswer: assistantPlain,
+              source: "live_search",
+            });
+            console.log(
+              ">>> [LEARNING] Résultat saveLearningSuggestion",
+              JSON.stringify(learnRes),
+            );
+            if (!learnRes.ok) {
+              console.error(">>> [LEARNING] Échec:", learnRes.error);
+            } else {
+              console.log(">>> [LEARNING] Insertion OK (pending).");
+            }
+          } catch (learnErr) {
+            console.error(">>> [LEARNING] Exception saveLearningSuggestion:", learnErr);
+          }
+        } else {
+          console.log(
+            ">>> [LEARNING] Sauvegarde ignorée (condition non remplie).",
+            JSON.stringify({
+              learningSearchSucceeded,
+              hasAssistant: assistantPlain.length > 0,
+              hasMessage: message.trim().length > 0,
+            }),
+          );
         }
 
         if (leadIdForComplaint.length > 0) {

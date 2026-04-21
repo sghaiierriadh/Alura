@@ -245,6 +245,44 @@ export type Database = {
           },
         ];
       };
+      learning_suggestions: {
+        Row: {
+          id: string;
+          agent_id: string;
+          status: string;
+          user_question: string;
+          suggested_answer: string;
+          source: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          status?: string;
+          user_question: string;
+          suggested_answer: string;
+          source?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          status?: string;
+          user_question?: string;
+          suggested_answer?: string;
+          source?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "learning_suggestions_agent_id_fkey";
+            columns: ["agent_id"];
+            isOneToOne: false;
+            referencedRelation: "agents";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
