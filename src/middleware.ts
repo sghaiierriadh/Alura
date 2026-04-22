@@ -29,6 +29,19 @@ export async function middleware(request: NextRequest) {
   const { response, user } = await updateSession(request);
   const pathname = request.nextUrl.pathname;
 
+  // Widget/embed must stay embeddable on external websites.
+  if (pathname === "/widget" || pathname.startsWith("/widget/")) {
+    response.headers.delete("X-Frame-Options");
+    response.headers.delete("x-frame-options");
+    const frameAncestors =
+      process.env.WIDGET_CSP_FRAME_ANCESTORS?.trim() ||
+      "* chrome-extension: file:";
+    response.headers.set(
+      "Content-Security-Policy",
+      `frame-ancestors ${frameAncestors};`,
+    );
+  }
+
   if (isAuthOnlyPath(pathname) && user) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

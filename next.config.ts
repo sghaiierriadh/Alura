@@ -5,7 +5,8 @@ import type { NextConfig } from "next";
  * Exemple : `'self' https://club-priveleges.example https://autre-partenaire.example`
  * ou `*` pour autoriser tout hôte parent (widget exportable maximal).
  */
-const widgetFrameAncestors = process.env.WIDGET_CSP_FRAME_ANCESTORS?.trim() || "*";
+const widgetFrameAncestors =
+  process.env.WIDGET_CSP_FRAME_ANCESTORS?.trim() || "* chrome-extension: file:";
 
 const widgetSecurityHeaders = [
   {
@@ -28,11 +29,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/widget",
+        source: "/widget/:path*",
         headers: widgetSecurityHeaders,
       },
       {
-        source: "/embed",
+        source: "/embed/:path*",
         headers: widgetSecurityHeaders,
       },
     ];

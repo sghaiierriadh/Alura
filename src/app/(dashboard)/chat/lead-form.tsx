@@ -34,11 +34,23 @@ export function LeadForm({
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [submitLocked, setSubmitLocked] = useState(false);
 
-  const canSubmit = !isPending && (email.trim().length > 0 || phone.trim().length > 0);
+  const canSubmit =
+    !isPending &&
+    !submitLocked &&
+    Boolean(sessionId?.trim()) &&
+    (email.trim().length > 0 || phone.trim().length > 0);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!canSubmit) return;
+    const resolvedSessionId = sessionId?.trim() || "";
+    if (!resolvedSessionId) {
+      setError("Session non prête. Réessayez dans 1 seconde.");
+      return;
+    }
+    setSubmitLocked(true);
     setError(null);
 
     startTransition(async () => {
@@ -49,7 +61,7 @@ export function LeadForm({
       });
       const result = await captureLead({
         agentId,
-        sessionId: sessionId?.trim() || null,
+        sessionId: resolvedSessionId,
         source: source?.trim() || null,
         fullName,
         email,
@@ -60,6 +72,7 @@ export function LeadForm({
 
       if (!result.ok) {
         setError(result.error);
+        setSubmitLocked(false);
         return;
       }
 
@@ -133,7 +146,7 @@ export function LeadForm({
         disabled={!canSubmit}
         className="h-10 w-full rounded-lg bg-zinc-100 text-sm font-medium text-zinc-900 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isPending ? "Envoi..." : "Être recontacté"}
+        {isPending || submitLocked ? "Envoi..." : "Être recontacté"}
       </button>
     </motion.form>
   );

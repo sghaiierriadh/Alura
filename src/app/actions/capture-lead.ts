@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createServiceRoleClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { toDbComplaintPriority } from "@/lib/ai/complaint-priority";
 import {
@@ -10,6 +11,7 @@ import {
   resolveComplaintText,
 } from "@/lib/ai/complaint-text";
 import type { Database } from "@/types/database.types";
+import { sendLeadAlertEmail } from "./send-lead-alert";
 
 export type CaptureLeadInput = {
   agentId: string;
@@ -29,7 +31,14 @@ export type CaptureLeadResult =
   | { ok: false; error: string };
 
 export type AddLeadComplaintResult =
-  | { ok: true; leadId: string; complaintId?: string; complaintText?: string; skipped?: boolean }
+  | {
+      ok: true;
+      leadId: string;
+      complaintId?: string;
+      complaintText?: string;
+      skipped?: boolean;
+      action?: "created" | "updated";
+    }
   | { ok: false; error: string };
 
 const LEAD_SOURCES = new Set(["widget", "embed", "dashboard", "api", "unknown"]);
@@ -57,6 +66,74 @@ function normalizeLeadSource(value?: string | null): string {
   return "unknown";
 }
 
+function mergeLeadQuestion(existing: string | null, incoming: string | null): string | null {
+  const base = normalizeOptional(existing);
+  const add = normalizeOptional(incoming);
+  if (!base && !add) return null;
+  if (!base) return add;
+  if (!add) return base;
+  if (base.includes(add)) return base;
+  return `${base}\n\n[Update ${new Date().toISOString()}]\n${add}`;
+}
+
+function appendComplaintContent(existing: string, incoming: string): string {
+  const base = normalizeOptional(existing) ?? "";
+  const add = normalizeOptional(incoming) ?? "";
+  if (!base) return add;
+  if (!add || base.includes(add)) return base;
+  return `${base}\n\n[Update ${new Date().toISOString()}]\n${add}`;
+}
+
+async function findLeadBySession(
+  client: SupabaseClient<Database>,
+  agentId: string,
+  sessionIdChat: string,
+) {
+  const { data } = await client
+    .from("leads")
+    .select("id, email, phone, full_name, last_question, session_id, source, created_at")
+    .eq("agent_id", agentId)
+    .eq("session_id", sessionIdChat)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
+async function updateExistingLead(
+  client: SupabaseClient<Database>,
+  leadId: string,
+  payload: {
+    fullName: string | null;
+    email: string | null;
+    phone: string | null;
+    lastQuestion: string | null;
+    sessionIdChat: string | null;
+    leadSource: string;
+  },
+  existing: {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+    last_question: string | null;
+    session_id: string | null;
+    source: string | null;
+  },
+) {
+  const mergedQuestion = mergeLeadQuestion(existing.last_question, payload.lastQuestion);
+  const updatePayload: Database["public"]["Tables"]["leads"]["Update"] = {
+    full_name: payload.fullName || existing.full_name,
+    email: payload.email || existing.email,
+    phone: payload.phone || existing.phone,
+    session_id: payload.sessionIdChat || existing.session_id,
+    source: payload.leadSource || existing.source || "widget",
+    last_question: mergedQuestion,
+  };
+  const { error } = await client.from("leads").update(updatePayload).eq("id", leadId);
+  return { ok: !error, error };
+}
+
 export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadResult> {
   const agentId = normalizeOptional(input.agentId);
   const email = normalizeOptional(input.email);
@@ -74,6 +151,9 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
   }
   if (!email && !phone) {
     return { ok: false, error: "Email ou téléphone requis." };
+  }
+  if (!sessionIdChat) {
+    return { ok: false, error: "sessionId requis pour capturer/mettre à jour le lead." };
   }
 
   const supabase = createClient();
@@ -94,6 +174,22 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
       return { ok: false, error: "Agent introuvable." };
     }
 
+    const recentLead = await findLeadBySession(supabase, agentId, sessionIdChat);
+    if (recentLead?.id) {
+      console.log(`Session ID reçu: ${sessionIdChat} - Action: UPDATE`);
+      const upd = await updateExistingLead(
+        supabase,
+        recentLead.id,
+        { fullName, email, phone, lastQuestion, sessionIdChat, leadSource },
+        recentLead,
+      );
+      if (!upd.ok) {
+        return { ok: false, error: upd.error?.message ?? "Mise à jour lead échouée." };
+      }
+      return { ok: true, leadId: recentLead.id };
+    }
+    console.log(`Session ID reçu: ${sessionIdChat} - Action: INSERT`);
+
     const { data: inserted, error } = await supabase
       .from("leads")
       .insert({
@@ -111,6 +207,7 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     if (error || !inserted?.id) {
       return { ok: false, error: error?.message ?? "Insertion lead échouée." };
     }
+    console.log("[captureLead] lead created", { leadId: inserted.id, agentId, sessionIdChat });
 
     if (isMeaningfulComplaint(lastQuestion)) {
       const admin = getServiceRoleAdmin();
@@ -124,6 +221,19 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
       if (complaintErr) {
         return { ok: false, error: complaintErr.message };
       }
+    }
+
+    const alert = await sendLeadAlertEmail({
+      agentId,
+      leadId: inserted.id,
+      fullName,
+      email,
+      phone,
+      source: leadSource,
+      lastQuestion,
+    });
+    if (!alert.ok) {
+      console.error("[captureLead] lead created but email notification failed:", alert.error);
     }
 
     return { ok: true, leadId: inserted.id };
@@ -149,6 +259,22 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     return { ok: false, error: "Agent introuvable." };
   }
 
+  const recentLead = await findLeadBySession(admin, agentId, sessionIdChat);
+  if (recentLead?.id) {
+    console.log(`Session ID reçu: ${sessionIdChat} - Action: UPDATE`);
+    const upd = await updateExistingLead(
+      admin,
+      recentLead.id,
+      { fullName, email, phone, lastQuestion, sessionIdChat, leadSource },
+      recentLead,
+    );
+    if (!upd.ok) {
+      return { ok: false, error: upd.error?.message ?? "Mise à jour lead échouée." };
+    }
+    return { ok: true, leadId: recentLead.id };
+  }
+  console.log(`Session ID reçu: ${sessionIdChat} - Action: INSERT`);
+
   const { data: inserted, error } = await admin
     .from("leads")
     .insert({
@@ -166,6 +292,7 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
   if (error || !inserted?.id) {
     return { ok: false, error: error?.message ?? "Insertion lead échouée." };
   }
+  console.log("[captureLead] lead created (service)", { leadId: inserted.id, agentId, sessionIdChat });
 
   if (isMeaningfulComplaint(lastQuestion)) {
     const { error: complaintErr } = await admin.from("lead_complaints").insert({
@@ -177,6 +304,19 @@ export async function captureLead(input: CaptureLeadInput): Promise<CaptureLeadR
     if (complaintErr) {
       return { ok: false, error: complaintErr.message };
     }
+  }
+
+  const alert = await sendLeadAlertEmail({
+    agentId,
+    leadId: inserted.id,
+    fullName,
+    email,
+    phone,
+    source: leadSource,
+    lastQuestion,
+  });
+  if (!alert.ok) {
+    console.error("[captureLead] lead created but email notification failed:", alert.error);
   }
 
   return { ok: true, leadId: inserted.id };
@@ -230,7 +370,7 @@ export async function addLeadComplaint(
   if (admin) {
     const { data: row, error: fetchErr } = await admin
       .from("leads")
-      .select("id, agent_id")
+      .select("id, agent_id, session_id")
       .eq("id", leadId)
       .eq("agent_id", agentId)
       .maybeSingle();
@@ -239,12 +379,74 @@ export async function addLeadComplaint(
       return { ok: false, error: "Lead introuvable." };
     }
 
+    let existingOpen: { id: string; content: string; status: string; priority: string } | null =
+      null;
+    const sid = normalizeOptional(row.session_id);
+    if (sid) {
+      const { data: sessionLeadRows } = await admin
+        .from("leads")
+        .select("id")
+        .eq("agent_id", agentId)
+        .eq("session_id", sid);
+      const sessionLeadIds = (sessionLeadRows ?? []).map((x) => x.id);
+      if (sessionLeadIds.length > 0) {
+        const { data: bySessionOpen } = await admin
+          .from("lead_complaints")
+          .select("id, content, status, priority")
+          .in("lead_id", sessionLeadIds)
+          .in("status", ["open", "in_progress"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (bySessionOpen?.id) {
+          existingOpen = bySessionOpen;
+        }
+      }
+    }
+    if (!existingOpen) {
+      const { data: byLeadOpen } = await admin
+        .from("lead_complaints")
+        .select("id, content, status, priority")
+        .eq("lead_id", leadId)
+        .in("status", ["open", "in_progress"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      existingOpen = byLeadOpen ?? null;
+    }
+
+    if (existingOpen?.id) {
+      const nextContent = appendComplaintContent(existingOpen.content, lastQuestion);
+      const { error: updErr } = await admin
+        .from("lead_complaints")
+        .update({
+          content: nextContent,
+          priority: complaintPriority,
+        })
+        .eq("id", existingOpen.id);
+      if (updErr) {
+        console.error("[capture-lead] addLeadComplaint update (service role) failed:", {
+          message: updErr.message,
+          code: updErr.code,
+          details: updErr.details,
+          hint: updErr.hint,
+        });
+        return { ok: false, error: updErr.message };
+      }
+      return {
+        ok: true,
+        leadId,
+        complaintId: existingOpen.id,
+        complaintText: lastQuestion,
+        action: "updated",
+      };
+    }
+
     const { data: insertedComplaint, error: insertErr } = await admin
       .from("lead_complaints")
       .insert(insertPayload)
       .select("id")
       .single();
-
     if (insertErr) {
       console.error("[capture-lead] addLeadComplaint insert (service role) failed:", {
         message: insertErr.message,
@@ -254,12 +456,12 @@ export async function addLeadComplaint(
       });
       return { ok: false, error: insertErr.message };
     }
-
     return {
       ok: true,
       leadId,
       complaintId: insertedComplaint?.id,
       complaintText: lastQuestion,
+      action: "created",
     };
   }
 
@@ -280,7 +482,7 @@ export async function addLeadComplaint(
 
   const { data: row, error: fetchErr } = await supabase
     .from("leads")
-    .select("id, agent_id")
+    .select("id, agent_id, session_id")
     .eq("id", leadId)
     .eq("agent_id", agentId)
     .maybeSingle();
@@ -289,12 +491,73 @@ export async function addLeadComplaint(
     return { ok: false, error: "Lead introuvable." };
   }
 
+  let existingOpen: { id: string; content: string; status: string; priority: string } | null = null;
+  const sid = normalizeOptional(row.session_id);
+  if (sid) {
+    const { data: sessionLeadRows } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("agent_id", agentId)
+      .eq("session_id", sid);
+    const sessionLeadIds = (sessionLeadRows ?? []).map((x) => x.id);
+    if (sessionLeadIds.length > 0) {
+      const { data: bySessionOpen } = await supabase
+        .from("lead_complaints")
+        .select("id, content, status, priority")
+        .in("lead_id", sessionLeadIds)
+        .in("status", ["open", "in_progress"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (bySessionOpen?.id) {
+        existingOpen = bySessionOpen;
+      }
+    }
+  }
+  if (!existingOpen) {
+    const { data: byLeadOpen } = await supabase
+      .from("lead_complaints")
+      .select("id, content, status, priority")
+      .eq("lead_id", leadId)
+      .in("status", ["open", "in_progress"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    existingOpen = byLeadOpen ?? null;
+  }
+
+  if (existingOpen?.id) {
+    const nextContent = appendComplaintContent(existingOpen.content, lastQuestion);
+    const { error: updErr } = await supabase
+      .from("lead_complaints")
+      .update({
+        content: nextContent,
+        priority: complaintPriority,
+      })
+      .eq("id", existingOpen.id);
+    if (updErr) {
+      console.error("[capture-lead] addLeadComplaint update (session) failed:", {
+        message: updErr.message,
+        code: updErr.code,
+        details: updErr.details,
+        hint: updErr.hint,
+      });
+      return { ok: false, error: updErr.message };
+    }
+    return {
+      ok: true,
+      leadId,
+      complaintId: existingOpen.id,
+      complaintText: lastQuestion,
+      action: "updated",
+    };
+  }
+
   const { data: insertedComplaint, error: insertErr } = await supabase
     .from("lead_complaints")
     .insert(insertPayload)
     .select("id")
     .single();
-
   if (insertErr) {
     console.error("[capture-lead] addLeadComplaint insert (session) failed:", {
       message: insertErr.message,
@@ -304,11 +567,11 @@ export async function addLeadComplaint(
     });
     return { ok: false, error: insertErr.message };
   }
-
   return {
     ok: true,
     leadId,
     complaintId: insertedComplaint?.id,
     complaintText: lastQuestion,
+    action: "created",
   };
 }

@@ -5,12 +5,17 @@ import { isWidgetAgentIdFormatValid } from "@/lib/agents/widget-agent-id";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ agentId?: string }>;
+  searchParams: Promise<{ agentId?: string; id?: string }>;
 };
 
 export default async function WidgetPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const raw = typeof sp.agentId === "string" ? sp.agentId.trim() : "";
+  const raw =
+    typeof sp.agentId === "string"
+      ? sp.agentId.trim()
+      : typeof sp.id === "string"
+        ? sp.id.trim()
+        : "";
 
   if (!raw) {
     return (
@@ -54,6 +59,10 @@ export default async function WidgetPage({ searchParams }: PageProps) {
       <ChatPanel
         agentId={agent.id}
         companyName={agent.company_name?.trim() || "Votre partenaire"}
+        chatbotName={agent.chatbot_name?.trim() || "Alura"}
+        themeColor={agent.theme_color?.trim() || "#18181b"}
+        welcomeMessage={agent.welcome_message?.trim() || null}
+        avatarUrl={agent.avatar_url?.trim() || null}
         layout="embedded"
       />
     </div>

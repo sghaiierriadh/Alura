@@ -16,11 +16,18 @@ export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const LEAD_FOLLOW_UP_MESSAGE =
   "C'est noté, j'ai transmis votre demande. Avez-vous une autre question ou une précision à ajouter avant que nous ne clôturions cet échange ?";
-function buildDynamicGreeting(companyName: string): string {
+function buildDynamicGreeting(
+  companyName: string,
+  chatbotName: string,
+  welcomeMessage?: string | null,
+): string {
+  const custom = (welcomeMessage ?? "").trim();
+  if (custom) return custom;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Bonjour" : hour >= 18 ? "Bonsoir" : "Salut";
   const partner = companyName.trim() || "votre partenaire";
-  return `${greeting}, je suis Alura, en charge de vos réclamations, problèmes ou demandes chez ${partner}. Comment puis-je vous aider ?`;
+  const bot = chatbotName.trim() || "Alura";
+  return `${greeting}, je suis ${bot}, en charge de vos réclamations, problèmes ou demandes chez ${partner}. Comment puis-je vous aider ?`;
 }
 
 function chatSessionStorageKey(id: string) {
@@ -62,11 +69,28 @@ function ChatMarkdown({
 type Props = {
   agentId: string;
   companyName: string;
+  chatbotName?: string;
+  themeColor?: string;
+  welcomeMessage?: string | null;
+  avatarUrl?: string | null;
   /** Widget / iframe : hauteur contrainte, scroll interne, pas de min-height dashboard. */
   layout?: "default" | "embedded";
 };
 
-export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
+function getSafeThemeColor(color?: string): string {
+  const value = (color ?? "").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#18181b";
+}
+
+export function ChatPanel({
+  agentId,
+  companyName,
+  chatbotName = "Alura",
+  themeColor,
+  welcomeMessage,
+  avatarUrl,
+  layout = "default",
+}: Props) {
   const [messages, setMessages] = useState<Array<ChatMessage & { uiOnly?: boolean }>>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -76,6 +100,7 @@ export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [visitorFirstName, setVisitorFirstName] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const primaryColor = getSafeThemeColor(themeColor);
 
   const leadFullyCaptured = Boolean(storedLeadId?.trim());
 
@@ -83,9 +108,13 @@ export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
     if (messages.length > 0) return;
     console.log("[Alura chat client] Greeting...");
     setMessages([
-      { role: "assistant", content: buildDynamicGreeting(companyName), uiOnly: true },
+      {
+        role: "assistant",
+        content: buildDynamicGreeting(companyName, chatbotName, welcomeMessage),
+        uiOnly: true,
+      },
     ]);
-  }, [companyName, messages.length]);
+  }, [chatbotName, companyName, messages.length, welcomeMessage]);
 
   useEffect(() => {
     try {
@@ -94,6 +123,9 @@ export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
       if (!id) {
         id = crypto.randomUUID();
         sessionStorage.setItem(sk, id);
+        console.log("[chat] session_id generated:", id);
+      } else {
+        console.log("[chat] session_id reused:", id);
       }
       setSessionId(id);
       const leadFlag = sessionStorage.getItem(chatLeadStorageKey(agentId, id)) === "1";
@@ -435,11 +467,23 @@ export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
           Conversation
         </p>
         <h1 className="mt-1 text-lg font-semibold tracking-tight text-zinc-50">
-          {companyName}
+          {chatbotName}
         </h1>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt={`${chatbotName} avatar`}
+              className="h-7 w-7 rounded-full border border-zinc-700 object-cover"
+            />
+          ) : (
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-[10px] font-semibold text-zinc-300">
+              {chatbotName.slice(0, 1).toUpperCase()}
+            </div>
+          )}
           <p className="text-sm text-zinc-500">
-            Alura répond à partir de votre base de connaissance.
+            {companyName} - assistant alimente par votre base de connaissance.
           </p>
           <button
             type="button"
@@ -483,9 +527,10 @@ export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
               <div
                 className={
                   m.role === "user"
-                    ? "max-w-[85%] rounded-2xl rounded-br-md bg-zinc-100 px-4 py-2.5 text-sm leading-relaxed text-zinc-900"
+                    ? "max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed text-white"
                     : "max-w-[85%] rounded-2xl rounded-bl-md border border-zinc-800/90 bg-zinc-900/60 px-4 py-2.5 text-sm leading-relaxed text-zinc-100"
                 }
+                style={m.role === "user" ? { backgroundColor: primaryColor } : undefined}
               >
                 <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                   {m.role === "user" ? "Vous" : "Alura"}
@@ -545,7 +590,8 @@ export function ChatPanel({ agentId, companyName, layout = "default" }: Props) {
             type="button"
             onClick={() => void sendMessage()}
             disabled={!canSend}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-900 transition hover:bg-white disabled:pointer-events-none disabled:opacity-35"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-white transition hover:brightness-110 disabled:pointer-events-none disabled:opacity-35"
+            style={{ backgroundColor: primaryColor }}
             aria-label="Envoyer"
           >
             <Send className="h-4 w-4" strokeWidth={2} />

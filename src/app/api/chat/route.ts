@@ -532,7 +532,7 @@ export async function POST(req: Request) {
             );
           } else if (!upd.skipped && upd.complaintText) {
             console.log(
-              `TICKET CREATED FOR LEAD ${leadIdForComplaint}: ${upd.complaintText}`,
+              `TICKET ${upd.action === "updated" ? "UPDATED" : "CREATED"} FOR LEAD ${leadIdForComplaint}: ${upd.complaintText}`,
             );
           } else if (upd.skipped) {
             console.log(
