@@ -147,6 +147,7 @@ export type Database = {
           resolution_notes: string | null;
           priority: string;
           created_at: string;
+          metadata: Json;
         };
         Insert: {
           id?: string;
@@ -156,6 +157,7 @@ export type Database = {
           resolution_notes?: string | null;
           priority?: string;
           created_at?: string;
+          metadata?: Json;
         };
         Update: {
           id?: string;
@@ -165,6 +167,7 @@ export type Database = {
           resolution_notes?: string | null;
           priority?: string;
           created_at?: string;
+          metadata?: Json;
         };
         Relationships: [
           {

@@ -97,6 +97,7 @@ export async function addKnowledgeFromResolution(
 
   revalidatePath("/knowledge");
   revalidatePath("/admin/tickets");
+  revalidatePath("/dashboard");
   return { ok: true };
 }
 

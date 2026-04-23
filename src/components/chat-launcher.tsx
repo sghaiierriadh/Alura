@@ -55,10 +55,16 @@ export function ChatLauncher({ agentId, baseUrl, className }: Props) {
         disabled={!idValid}
         className={
           className ??
-          "fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-900 text-zinc-100 shadow-lg ring-1 ring-zinc-700/80 transition hover:bg-zinc-800 hover:ring-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-40"
+          "fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-900 text-zinc-100 shadow-lg ring-1 ring-zinc-700/80 transition hover:bg-zinc-800 hover:ring-zinc-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:pointer-events-none disabled:opacity-40 relative"
         }
         aria-label="Ouvrir le chat Alura"
       >
+        {!open ? (
+          <span
+            aria-hidden
+            className="absolute inset-0 -z-10 animate-ping rounded-full bg-zinc-700/35"
+          />
+        ) : null}
         <MessageCircle className="h-7 w-7" strokeWidth={1.75} aria-hidden />
       </button>
 

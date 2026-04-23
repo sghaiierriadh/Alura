@@ -100,6 +100,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-full flex-1 flex-col lg:flex-row">
       <aside className="hidden shrink-0 border-b border-zinc-200 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-950 lg:block lg:w-56 lg:border-b-0 lg:border-r">
         <div className="sticky top-0 flex h-full min-h-0 flex-col gap-6 px-3 py-6">
+          <div className="px-2">
+            <div className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/80 bg-white px-2.5 py-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-900 text-[10px] font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
+                A
+              </span>
+              <span className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                Alura
+              </span>
+            </div>
+          </div>
           <div className="px-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
               Vue d’ensemble

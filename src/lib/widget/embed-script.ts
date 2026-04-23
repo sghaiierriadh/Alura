@@ -118,16 +118,39 @@ export function buildWidgetLauncherScript(origin: string): string {
   launcher.onmouseleave = function () { launcher.style.transform = 'translateY(0)'; };
   launcher.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 10h8M8 14h5M21 12c0 4.97-4.48 9-10 9-1.2 0-2.35-.19-3.4-.55L3 22l1.5-3.58A8.84 8.84 0 0 1 1 12c0-4.97 4.48-9 10-9s10 4.03 10 9Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+  var pulse = document.createElement('span');
+  pulse.style.position = 'absolute';
+  pulse.style.right = '0';
+  pulse.style.bottom = '0';
+  pulse.style.width = launcherSize + 'px';
+  pulse.style.height = launcherSize + 'px';
+  pulse.style.borderRadius = '9999px';
+  pulse.style.background = 'rgba(24, 24, 27, 0.22)';
+  pulse.style.pointerEvents = 'none';
+  pulse.style.transform = 'scale(1)';
+  pulse.style.opacity = '0.75';
+  pulse.style.transition = 'opacity 220ms ease';
+
+  var pulseTick = 0;
+  setInterval(function () {
+    if (open) return;
+    pulseTick = pulseTick ? 0 : 1;
+    pulse.style.transform = pulseTick ? 'scale(1.22)' : 'scale(1)';
+    pulse.style.opacity = pulseTick ? '0.15' : '0.75';
+  }, 1200);
+
   var open = false;
   function applyState() {
     if (open) {
       panel.style.opacity = '1';
       panel.style.transform = 'translateY(0) scale(1)';
       panel.style.pointerEvents = 'auto';
+      pulse.style.opacity = '0';
     } else {
       panel.style.opacity = '0';
       panel.style.transform = 'translateY(18px) scale(0.98)';
       panel.style.pointerEvents = 'none';
+      pulse.style.opacity = '0.75';
     }
   }
   launcher.addEventListener('click', function () {
@@ -156,6 +179,7 @@ export function buildWidgetLauncherScript(origin: string): string {
   window.addEventListener('resize', applyMobileLayout);
 
   host.appendChild(panel);
+  host.appendChild(pulse);
   host.appendChild(launcher);
   document.body.appendChild(host);
   applyState();
@@ -164,7 +188,10 @@ export function buildWidgetLauncherScript(origin: string): string {
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (meta) {
       if (!meta) return;
-      if (meta.themeColor) launcher.style.background = meta.themeColor;
+      if (meta.themeColor) {
+        launcher.style.background = meta.themeColor;
+        pulse.style.background = meta.themeColor + '33';
+      }
       if (meta.avatarUrl) {
         launcher.innerHTML = '';
         var img = document.createElement('img');

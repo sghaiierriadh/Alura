@@ -66,6 +66,19 @@ function ChatMarkdown({
   );
 }
 
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-2 text-xs text-zinc-400">
+      <span>Alura est en train d&apos;écrire</span>
+      <span className="flex items-center gap-1">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:0ms]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:120ms]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:240ms]" />
+      </span>
+    </div>
+  );
+}
+
 type Props = {
   agentId: string;
   companyName: string;
@@ -119,22 +132,22 @@ export function ChatPanel({
   useEffect(() => {
     try {
       const sk = chatSessionStorageKey(agentId);
-      let id = sessionStorage.getItem(sk);
+      let id = localStorage.getItem(sk);
       if (!id) {
         id = crypto.randomUUID();
-        sessionStorage.setItem(sk, id);
+        localStorage.setItem(sk, id);
         console.log("[chat] session_id generated:", id);
       } else {
         console.log("[chat] session_id reused:", id);
       }
       setSessionId(id);
-      const leadFlag = sessionStorage.getItem(chatLeadStorageKey(agentId, id)) === "1";
-      const leadIdRaw = sessionStorage.getItem(chatLeadIdKey(agentId, id))?.trim() ?? "";
+      const leadFlag = localStorage.getItem(chatLeadStorageKey(agentId, id)) === "1";
+      const leadIdRaw = localStorage.getItem(chatLeadIdKey(agentId, id))?.trim() ?? "";
       if (leadFlag && !leadIdRaw) {
-        sessionStorage.removeItem(chatLeadStorageKey(agentId, id));
+        localStorage.removeItem(chatLeadStorageKey(agentId, id));
       }
       setStoredLeadId(leadIdRaw || null);
-      const contactRaw = sessionStorage.getItem(chatLeadContactKey(agentId, id));
+      const contactRaw = localStorage.getItem(chatLeadContactKey(agentId, id));
       if (contactRaw) {
         try {
           const c = JSON.parse(contactRaw) as { fullName?: string };
@@ -221,13 +234,13 @@ export function ChatPanel({
       const resolvedSessionId =
         sessionId ??
         (typeof window !== "undefined"
-          ? sessionStorage.getItem(chatSessionStorageKey(agentId))
+          ? localStorage.getItem(chatSessionStorageKey(agentId))
           : null);
 
       if (resolvedSessionId) {
         try {
-          sessionStorage.setItem(chatLeadStorageKey(agentId, resolvedSessionId), "1");
-          sessionStorage.setItem(
+          localStorage.setItem(chatLeadStorageKey(agentId, resolvedSessionId), "1");
+          localStorage.setItem(
             chatLeadContactKey(agentId, resolvedSessionId),
             JSON.stringify({
               email: payload.email,
@@ -235,8 +248,8 @@ export function ChatPanel({
               fullName: payload.fullName,
             }),
           );
-          sessionStorage.setItem(chatLeadIdKey(agentId, resolvedSessionId), lid);
-          console.log("[Alura Debug] Persisting leadId (state + sessionStorage)", {
+          localStorage.setItem(chatLeadIdKey(agentId, resolvedSessionId), lid);
+          console.log("[Alura Debug] Persisting leadId (state + localStorage)", {
             leadId: lid,
             sessionId: resolvedSessionId,
           });
@@ -255,7 +268,7 @@ export function ChatPanel({
         });
       } else {
         console.warn(
-          "[Alura Debug] captureLead OK mais sessionId introuvable — leadId non écrit en sessionStorage",
+          "[Alura Debug] captureLead OK mais sessionId introuvable — leadId non écrit en localStorage",
           { leadId: lid },
         );
       }
@@ -306,7 +319,7 @@ export function ChatPanel({
       let effectiveLeadId = storedLeadId?.trim() ?? "";
       if (typeof window !== "undefined" && sessionId) {
         const fromStore =
-          sessionStorage.getItem(chatLeadIdKey(agentId, sessionId))?.trim() ?? "";
+          localStorage.getItem(chatLeadIdKey(agentId, sessionId))?.trim() ?? "";
         if (fromStore && fromStore !== effectiveLeadId) {
           effectiveLeadId = fromStore;
           setStoredLeadId(fromStore);
@@ -316,7 +329,7 @@ export function ChatPanel({
       const leadCapturedFromStorage =
         typeof window !== "undefined" &&
         Boolean(sessionId) &&
-        sessionStorage.getItem(chatLeadStorageKey(agentId, sessionId)) === "1";
+        localStorage.getItem(chatLeadStorageKey(agentId, sessionId)) === "1";
       const leadCapturedForApi =
         leadFullyCaptured || (leadCapturedFromStorage && Boolean(effectiveLeadId));
 
@@ -416,15 +429,15 @@ export function ChatPanel({
   const startNewSession = useCallback(() => {
     try {
       const sk = chatSessionStorageKey(agentId);
-      const id = sessionStorage.getItem(sk);
+      const id = localStorage.getItem(sk);
       if (id) {
-        sessionStorage.removeItem(chatLeadStorageKey(agentId, id));
-        sessionStorage.removeItem(chatLeadContactKey(agentId, id));
-        sessionStorage.removeItem(chatLeadIdKey(agentId, id));
+        localStorage.removeItem(chatLeadStorageKey(agentId, id));
+        localStorage.removeItem(chatLeadContactKey(agentId, id));
+        localStorage.removeItem(chatLeadIdKey(agentId, id));
       }
-      sessionStorage.removeItem(sk);
+      localStorage.removeItem(sk);
       const newId = crypto.randomUUID();
-      sessionStorage.setItem(sk, newId);
+      localStorage.setItem(sk, newId);
       setSessionId(newId);
       setStoredLeadId(null);
       setVisitorFirstName(null);
@@ -527,8 +540,8 @@ export function ChatPanel({
               <div
                 className={
                   m.role === "user"
-                    ? "max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed text-white"
-                    : "max-w-[85%] rounded-2xl rounded-bl-md border border-zinc-800/90 bg-zinc-900/60 px-4 py-2.5 text-sm leading-relaxed text-zinc-100"
+                    ? "max-w-[86%] rounded-3xl rounded-br-lg px-4 py-2.5 text-sm leading-relaxed text-white shadow-md"
+                    : "max-w-[86%] rounded-3xl rounded-bl-lg border border-zinc-800/90 bg-zinc-900/60 px-4 py-2.5 text-sm leading-relaxed text-zinc-100 shadow-md"
                 }
                 style={m.role === "user" ? { backgroundColor: primaryColor } : undefined}
               >
@@ -536,7 +549,7 @@ export function ChatPanel({
                   {m.role === "user" ? "Vous" : "Alura"}
                 </span>
                 {showTypingDot ? (
-                  <span className="text-zinc-400">…</span>
+                  <TypingIndicator />
                 ) : (
                   <ChatMarkdown content={m.content} role={m.role} />
                 )}

@@ -7,6 +7,8 @@ import { loadMyAgent } from "@/lib/agents/server-access";
 import { TicketsTableClient } from "./tickets-table-client";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export default async function AdminTicketsPage() {
   const agent = await loadMyAgent();
@@ -19,7 +21,13 @@ export default async function AdminTicketsPage() {
     redirect("/onboarding");
   }
 
+  console.log("[admin/tickets] page render", {
+    agentId: agent.id,
+    userId: ctx.userId,
+  });
+
   const tickets = await fetchTicketsForAgent(ctx.client, agent.id);
+  console.log("Tickets récupérés:", tickets.length);
 
   return (
     <div>

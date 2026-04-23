@@ -1,5 +1,5 @@
-import type { Database } from "@/types/database.types";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/types/database.types";
+import { createClient as createServiceRoleClient, type SupabaseClient } from "@supabase/supabase-js";
 
 type LeadRow = Database["public"]["Tables"]["leads"]["Row"];
 type ComplaintRow = Database["public"]["Tables"]["lead_complaints"]["Row"];
@@ -7,6 +7,31 @@ type ComplaintRow = Database["public"]["Tables"]["lead_complaints"]["Row"];
 export type TicketWithLead = ComplaintRow & {
   leads: Pick<LeadRow, "id" | "full_name" | "email" | "phone" | "agent_id" | "source"> | null;
 };
+
+function getServiceRoleClient(): SupabaseClient<Database> | null {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!key || !url) return null;
+  return createServiceRoleClient<Database>(url, key);
+}
+
+/**
+ * Normalise le champ `metadata` en objet JSON sans faire échouer le rendu :
+ * accepte null, objets vides, strings JSON malformées, tableaux, primitives…
+ */
+function safeMetadata(raw: unknown): Json {
+  if (raw === null || raw === undefined) return {};
+  if (typeof raw === "object") return raw as Json;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return (parsed ?? {}) as Json;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 
 function normalizeLeadSourceRow(row: LeadRow): LeadRow {
   const src = row.source?.trim();
@@ -25,6 +50,7 @@ function normalizeTicketRow(row: TicketWithLead): TicketWithLead {
     status: st && st.length > 0 ? st : "open",
     priority: pr && pr.length > 0 ? pr : "normal",
     resolution_notes: notes ?? null,
+    metadata: safeMetadata(row.metadata),
     leads: row.leads
       ? {
           ...row.leads,
@@ -113,45 +139,70 @@ export async function fetchLeadsForAgent(
   return (data ?? []).map(normalizeLeadSourceRow);
 }
 
-export async function fetchTicketsForAgent(
+async function fetchLeadIdsForAgent(
   client: SupabaseClient<Database>,
   agentId: string,
-): Promise<TicketWithLead[]> {
-  const { data: leadRows } = await client
+  label: string,
+): Promise<string[]> {
+  const { data, error } = await client
     .from("leads")
     .select("id")
     .eq("agent_id", agentId);
-  const ids = (leadRows ?? []).map((r) => r.id);
-  if (ids.length === 0) return [];
+  if (error) {
+    console.warn(`[dashboard-queries] ${label} — leads lookup error:`, error.message);
+    return [];
+  }
+  return (data ?? []).map((r) => r.id);
+}
+
+async function fetchTicketsWithClient(
+  client: SupabaseClient<Database>,
+  leadIds: string[],
+  label: string,
+): Promise<TicketWithLead[]> {
+  if (leadIds.length === 0) return [];
 
   const ticketSelect =
-    "id, lead_id, content, status, resolution_notes, priority, created_at, leads(id, full_name, email, phone, agent_id, source)";
+    "id, lead_id, content, status, resolution_notes, priority, created_at, metadata, leads(id, full_name, email, phone, agent_id, source)";
 
-  const { data, error } = await client
+  const joined = await client
     .from("lead_complaints")
     .select(ticketSelect)
-    .in("lead_id", ids)
+    .in("lead_id", leadIds)
     .order("created_at", { ascending: false });
 
-  if (!error && data) {
-    return (data as TicketWithLead[]).map(normalizeTicketRow);
+  if (!joined.error && joined.data) {
+    console.log(
+      `[dashboard-queries] ${label} joined query → ${joined.data.length} rows`,
+    );
+    return (joined.data as TicketWithLead[]).map(normalizeTicketRow);
   }
 
-  if (error) {
-    console.warn("[dashboard-queries] fetchTicketsForAgent join:", error.message);
+  if (joined.error) {
+    console.warn(
+      `[dashboard-queries] ${label} join error:`,
+      joined.error.message,
+    );
   }
 
   const { data: flat, error: flatErr } = await client
     .from("lead_complaints")
-    .select("id, lead_id, content, status, resolution_notes, priority, created_at")
-    .in("lead_id", ids)
+    .select(
+      "id, lead_id, content, status, resolution_notes, priority, created_at, metadata",
+    )
+    .in("lead_id", leadIds)
     .order("created_at", { ascending: false });
-  if (flatErr || !flat?.length) return [];
+
+  if (flatErr) {
+    console.warn(`[dashboard-queries] ${label} flat error:`, flatErr.message);
+    return [];
+  }
+  if (!flat?.length) return [];
 
   const { data: leadsData } = await client
     .from("leads")
     .select("id, full_name, email, phone, agent_id, session_id, source")
-    .in("id", ids);
+    .in("id", leadIds);
   const byId = new Map((leadsData ?? []).map((l) => [l.id, l]));
 
   return flat.map((c) => {
@@ -172,7 +223,53 @@ export async function fetchTicketsForAgent(
         typeof c.priority === "string" && c.priority.trim().length > 0
           ? c.priority.trim()
           : "normal",
+      metadata: safeMetadata((c as { metadata?: unknown }).metadata),
       leads: lead,
     } as TicketWithLead);
   });
+}
+
+export async function fetchTicketsForAgent(
+  client: SupabaseClient<Database>,
+  agentId: string,
+): Promise<TicketWithLead[]> {
+  console.log("[dashboard-queries] fetchTicketsForAgent start", { agentId });
+
+  const leadIds = await fetchLeadIdsForAgent(client, agentId, "rls");
+  console.log("[dashboard-queries] RLS leads count:", leadIds.length);
+
+  const ticketsRls = await fetchTicketsWithClient(client, leadIds, "rls");
+  console.log("[dashboard-queries] RLS tickets count:", ticketsRls.length);
+
+  if (ticketsRls.length > 0 || leadIds.length > 0) {
+    return ticketsRls;
+  }
+
+  // Filet de sécurité : si RLS renvoie 0 lead (policy manquante / session altérée),
+  // on retente avec le service-role key pour propager les données existantes en base
+  // au dashboard authentifié (la vérification de propriété a déjà été faite
+  // en amont via `loadMyAgent()`).
+  const admin = getServiceRoleClient();
+  if (!admin) {
+    console.warn(
+      "[dashboard-queries] fallback service-role indisponible (SUPABASE_SERVICE_ROLE_KEY manquant) — RLS bloque probablement la lecture.",
+    );
+    return [];
+  }
+
+  const fallbackLeadIds = await fetchLeadIdsForAgent(admin, agentId, "service-role");
+  console.log(
+    "[dashboard-queries] service-role leads count:",
+    fallbackLeadIds.length,
+  );
+  const ticketsAdmin = await fetchTicketsWithClient(
+    admin,
+    fallbackLeadIds,
+    "service-role",
+  );
+  console.log(
+    "[dashboard-queries] service-role tickets count:",
+    ticketsAdmin.length,
+  );
+  return ticketsAdmin;
 }

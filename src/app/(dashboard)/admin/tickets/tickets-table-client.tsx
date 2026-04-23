@@ -1,6 +1,7 @@
 "use client";
 
 import { DataTable, type DataTableColumn } from "@/components/admin/data-table";
+import { TicketDetailSheet } from "@/components/admin/ticket-detail-sheet";
 import { TicketPrioritySelect } from "@/components/admin/ticket-priority-select";
 import { TicketStatusEditor } from "@/components/admin/ticket-status-editor";
 import type { TicketWithLead } from "@/lib/admin/dashboard-queries";
@@ -13,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RotateCcw } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const FILTER_ALL = "all";
@@ -34,16 +35,11 @@ function dash(v: string | null | undefined) {
   return t && t.length > 0 ? t : "—";
 }
 
-function excerpt(text: string, max = 96) {
-  const t = text.trim();
-  if (t.length <= max) return t;
-  return `${t.slice(0, max)}…`;
-}
-
 export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL);
   const [priorityFilter, setPriorityFilter] = useState(FILTER_ALL);
   const [search, setSearch] = useState("");
+  const [activeTicket, setActiveTicket] = useState<TicketWithLead | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -88,9 +84,29 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
       id: "content",
       header: "Contenu",
       cell: (row) => (
-        <p className="max-w-md text-zinc-700 dark:text-zinc-300" title={row.content}>
-          {excerpt(row.content)}
+        <p
+          className="line-clamp-2 max-w-md text-zinc-700 dark:text-zinc-300"
+          title={row.content}
+        >
+          {row.content}
         </p>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Détails",
+      headerClassName: "w-[7rem]",
+      cell: (row) => (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 gap-1.5 px-2.5 text-xs"
+          onClick={() => setActiveTicket(row)}
+          aria-label="Ouvrir les détails du ticket"
+        >
+          <Eye className="h-3.5 w-3.5 opacity-80" aria-hidden />
+          Détails
+        </Button>
       ),
     },
     {
@@ -189,6 +205,12 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
         rows={filtered}
         getRowKey={(r) => r.id}
         emptyLabel="Aucun ticket ne correspond aux filtres."
+      />
+
+      <TicketDetailSheet
+        ticket={activeTicket}
+        open={activeTicket !== null}
+        onClose={() => setActiveTicket(null)}
       />
     </div>
   );
