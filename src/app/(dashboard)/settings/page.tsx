@@ -2,9 +2,23 @@ import { AgentApiExpertForm } from "@/components/dashboard/AgentApiExpertForm";
 import { BusinessRecordsUpload } from "@/components/dashboard/BusinessRecordsUpload";
 import { SettingsLookProForm } from "@/components/dashboard/SettingsLookProForm";
 import { loadMyAgent } from "@/lib/agents/server-access";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
+
+async function resolveAppUrl() {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim() || "";
+  if (envUrl && !envUrl.includes("localhost")) return envUrl;
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") || h.get("host") || "";
+  const proto = h.get("x-forwarded-proto") || "https";
+  if (host && !host.includes("localhost") && !host.includes("127.0.0.1")) {
+    return `${proto}://${host}`;
+  }
+  return envUrl || "http://localhost:3000";
+}
 
 export default async function SettingsPage() {
   const agent = await loadMyAgent();
@@ -20,8 +34,7 @@ export default async function SettingsPage() {
     welcome_message?: string | null;
     avatar_url?: string | null;
   };
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "").trim() || "http://localhost:3000";
+  const appUrl = await resolveAppUrl();
 
   return (
     <div className="space-y-10">

@@ -160,14 +160,16 @@ export function buildWidgetLauncherScript(origin: string): string {
 
   function applyMobileLayout() {
     if (window.matchMedia('(max-width: 640px)').matches) {
-      panel.style.left = '12px';
-      panel.style.right = '12px';
-      panel.style.width = 'calc(100vw - 24px)';
-      panel.style.height = 'calc(100dvh - 104px)';
-      panel.style.maxHeight = 'calc(100dvh - 104px)';
-      panel.style.bottom = (launcherSize + 16) + 'px';
+      panel.style.left = '8px';
+      panel.style.right = '8px';
+      panel.style.top = '8px';
+      panel.style.width = 'calc(100vw - 16px)';
+      panel.style.height = 'calc(100dvh - 84px)';
+      panel.style.maxHeight = 'calc(100dvh - 84px)';
+      panel.style.bottom = (launcherSize + 12) + 'px';
     } else {
       panel.style.left = '';
+      panel.style.top = '';
       panel.style.right = '0';
       panel.style.width = '400px';
       panel.style.height = '600px';

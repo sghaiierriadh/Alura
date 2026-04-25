@@ -5,11 +5,13 @@ import {
   BookOpen,
   LayoutDashboard,
   LogOut,
+  Menu,
   MessageSquare,
   Settings,
   Sparkles,
   Ticket,
   Users,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -70,7 +72,7 @@ function SidebarLogout({ compact }: { compact?: boolean }) {
     setLoading(true);
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/auth/login");
     router.refresh();
     setLoading(false);
   }
@@ -97,6 +99,8 @@ function SidebarLogout({ compact }: { compact?: boolean }) {
 }
 
 export function DashboardShell({ children }: { children: ReactNode }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background text-foreground lg:flex-row">
       <aside className="hidden shrink-0 border-b border-zinc-200 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-950 lg:block lg:w-60 lg:border-b-0 lg:border-r">
@@ -137,20 +141,22 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 lg:hidden">
-        <div className="mx-auto flex max-w-5xl items-center gap-1 overflow-x-auto px-2 py-2">
-          {[...mainNav, ...secondaryNav].map((item) => (
-            <NavLink key={item.href} {...item} collapsed />
-          ))}
-        </div>
-      </div>
-
       <div className="flex min-w-0 flex-1 flex-col bg-background">
         <header className="border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
-            <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Alura
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 lg:hidden"
+                aria-label="Ouvrir le menu"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+              <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                Alura
+              </span>
+            </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
               <span className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
@@ -164,6 +170,60 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </header>
         <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</div>
       </div>
+
+      {mobileMenuOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-zinc-950/55 backdrop-blur-[1px]"
+            aria-label="Fermer le menu"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 h-full w-[86vw] max-w-[340px] border-r border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">Menu</p>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+                aria-label="Fermer le menu"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  Vue d’ensemble
+                </p>
+                <nav className="mt-2 flex flex-col gap-0.5" aria-label="Navigation principale mobile">
+                  {mainNav.map((item) => (
+                    <div key={item.href} onClick={() => setMobileMenuOpen(false)}>
+                      <NavLink {...item} />
+                    </div>
+                  ))}
+                </nav>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  Mon agent
+                </p>
+                <nav className="mt-2 flex flex-col gap-0.5" aria-label="Navigation agent mobile">
+                  {secondaryNav.map((item) => (
+                    <div key={item.href} onClick={() => setMobileMenuOpen(false)}>
+                      <NavLink {...item} />
+                    </div>
+                  ))}
+                </nav>
+              </div>
+              <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                <SidebarLogout />
+              </div>
+            </div>
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }

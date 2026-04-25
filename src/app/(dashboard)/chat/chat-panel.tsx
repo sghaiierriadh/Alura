@@ -627,7 +627,7 @@ export function ChatPanel({
             onKeyDown={onKeyDown}
             placeholder="Votre message…"
             disabled={isStreaming}
-            className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50"
+            className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50 sm:text-sm"
           />
           <button
             type="button"

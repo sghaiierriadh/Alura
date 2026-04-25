@@ -121,21 +121,21 @@ export function LeadForm({
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
           placeholder="Nom complet (optionnel)"
-          className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none"
+          className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-base text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none sm:text-sm"
         />
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
           type="email"
-          className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none"
+          className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-base text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none sm:text-sm"
         />
         <input
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="Téléphone"
           type="tel"
-          className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none"
+          className="h-10 rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-base text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-600 focus:outline-none sm:text-sm"
         />
       </div>
 
