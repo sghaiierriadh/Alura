@@ -14,10 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Eye, RotateCcw } from "lucide-react";
+import { ArrowUpDown, Eye, RotateCcw, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const FILTER_ALL = "all";
+type SortField = "date" | "priority" | "status";
+type SortDir = "asc" | "desc";
 
 function formatDateFr(iso: string) {
   try {
@@ -35,10 +37,34 @@ function dash(v: string | null | undefined) {
   return t && t.length > 0 ? t : "—";
 }
 
+function getLastMessageSnippet(content: string): string {
+  const chunks = content
+    .split(/\[Update\s+[^\]]+\]/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return (chunks[chunks.length - 1] ?? content).trim();
+}
+
+function priorityRank(priority: string | null | undefined): number {
+  const p = (priority ?? "normal").toLowerCase();
+  if (p === "high") return 3;
+  if (p === "normal") return 2;
+  return 1;
+}
+
+function statusRank(status: string | null | undefined): number {
+  const s = (status ?? "open").toLowerCase();
+  if (s === "resolved") return 3;
+  if (s === "in_progress") return 2;
+  return 1;
+}
+
 export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL);
   const [priorityFilter, setPriorityFilter] = useState(FILTER_ALL);
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [activeTicket, setActiveTicket] = useState<TicketWithLead | null>(null);
 
   const filtered = useMemo(() => {
@@ -63,16 +89,52 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
     });
   }, [tickets, statusFilter, priorityFilter, search]);
 
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      if (sortField === "date") {
+        const av = new Date(a.created_at).getTime();
+        const bv = new Date(b.created_at).getTime();
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      if (sortField === "priority") {
+        const av = priorityRank(a.priority);
+        const bv = priorityRank(b.priority);
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      const av = statusRank(a.status);
+      const bv = statusRank(b.status);
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
+    return list;
+  }, [filtered, sortField, sortDir]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortField(field);
+    setSortDir(field === "date" ? "desc" : "asc");
+  }
+
   const columns: DataTableColumn<TicketWithLead>[] = [
     {
       id: "date",
-      header: "Date",
+      header: (
+        <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort("date")}>
+          Date
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-70" />
+        </button>
+      ),
+      headerClassName: "w-[140px]",
       cellClassName: "whitespace-nowrap text-zinc-600 dark:text-zinc-400",
       cell: (row) => formatDateFr(row.created_at),
     },
     {
       id: "contact",
       header: "Contact",
+      headerClassName: "w-[220px]",
       cell: (row) => (
         <div className="max-w-[200px]">
           <p className="font-medium text-zinc-900 dark:text-zinc-50">{dash(row.leads?.full_name)}</p>
@@ -83,19 +145,21 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
     {
       id: "content",
       header: "Contenu",
+      headerClassName: "w-[280px]",
       cell: (row) => (
-        <p
-          className="line-clamp-2 max-w-md text-zinc-700 dark:text-zinc-300"
-          title={row.content}
-        >
-          {row.content}
-        </p>
+        <div className="max-w-md">
+          <p className="line-clamp-2 font-medium text-zinc-800 dark:text-zinc-100" title={getLastMessageSnippet(row.content)}>
+            {getLastMessageSnippet(row.content)}
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">Dernier message reçu</p>
+        </div>
       ),
     },
     {
       id: "actions",
       header: "Détails",
       headerClassName: "w-[7rem]",
+      cellClassName: "w-[7rem]",
       cell: (row) => (
         <Button
           type="button"
@@ -111,16 +175,28 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
     },
     {
       id: "priority",
-      header: "Priorité",
-      headerClassName: "w-[11rem]",
+      header: (
+        <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort("priority")}>
+          Priorité
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-70" />
+        </button>
+      ),
+      headerClassName: "w-[180px]",
       cell: (row) => (
-        <TicketPrioritySelect complaintId={row.id} priority={row.priority} />
+        <div>
+          <TicketPrioritySelect complaintId={row.id} priority={row.priority} />
+        </div>
       ),
     },
     {
       id: "status",
-      header: "Statut",
-      headerClassName: "min-w-[12rem]",
+      header: (
+        <button type="button" className="inline-flex items-center gap-1" onClick={() => toggleSort("status")}>
+          Statut
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-70" />
+        </button>
+      ),
+      headerClassName: "w-[220px]",
       cell: (row) => (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
           <TicketStatusEditor
@@ -150,15 +226,16 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Contenu, contact, note…"
-            className="h-9"
+            className="h-9 pl-9"
           />
+          <Search className="pointer-events-none relative -mt-8 ml-3 h-4 w-4 text-zinc-400" aria-hidden />
         </div>
         <div className="w-full min-w-[160px] space-y-1.5 sm:w-44">
           <label className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Statut
           </label>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="Tous" />
             </SelectTrigger>
             <SelectContent>
@@ -174,7 +251,7 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
             Priorité
           </label>
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="Toutes" />
             </SelectTrigger>
             <SelectContent>
@@ -202,7 +279,7 @@ export function TicketsTableClient({ tickets }: { tickets: TicketWithLead[] }) {
 
       <DataTable
         columns={columns}
-        rows={filtered}
+        rows={sorted}
         getRowKey={(r) => r.id}
         emptyLabel="Aucun ticket ne correspond aux filtres."
       />

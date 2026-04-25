@@ -194,12 +194,13 @@ export function buildWidgetLauncherScript(origin: string): string {
       }
       if (meta.avatarUrl) {
         launcher.innerHTML = '';
+        launcher.style.padding = '8px';
         var img = document.createElement('img');
         img.src = meta.avatarUrl;
         img.alt = 'Avatar chatbot';
         img.style.width = '100%';
         img.style.height = '100%';
-        img.style.objectFit = 'cover';
+        img.style.objectFit = 'contain';
         img.style.borderRadius = '9999px';
         launcher.appendChild(img);
       }

@@ -54,9 +54,10 @@ function CustomTooltip({
 }
 
 export function TicketsStatusDonut({ data, themeColor }: Props) {
-  const openColor = hexToRgba(themeColor, 0.95);
-  const progressColor = hexToRgba(themeColor, 0.72);
-  const resolvedColor = hexToRgba(themeColor, 0.5);
+  const openColor = "#ef4444";
+  const progressColor = "#f59e0b";
+  const resolvedColor = "#10b981";
+  const ringColor = hexToRgba(themeColor, 0.22);
   const slices = useMemo<Slice[]>(
     () => [
       { key: "open", label: "Ouverts", value: data.open, color: openColor },
@@ -107,7 +108,8 @@ export function TicketsStatusDonut({ data, themeColor }: Props) {
                 innerRadius={62}
                 outerRadius={90}
                 paddingAngle={hasData ? 2 : 0}
-                stroke="none"
+                stroke={ringColor}
+                strokeWidth={1}
                 isAnimationActive
               >
                 {(hasData

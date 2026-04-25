@@ -16,6 +16,7 @@ export default async function SettingsPage() {
   const agentBranding = agent as typeof agent & {
     chatbot_name?: string | null;
     theme_color?: string | null;
+    text_color?: string | null;
     welcome_message?: string | null;
     avatar_url?: string | null;
   };
@@ -38,6 +39,7 @@ export default async function SettingsPage() {
         appUrl={appUrl}
         initialChatbotName={agentBranding.chatbot_name?.trim() || "Alura"}
         initialThemeColor={agentBranding.theme_color?.trim() || "#18181b"}
+        initialTextColor={agentBranding.text_color?.trim() || "#FFFFFF"}
         initialWelcomeMessage={
           agentBranding.welcome_message?.trim() ||
           `Bonjour, je suis Alura de ${agent.company_name?.trim() || "votre entreprise"}. Comment puis-je vous aider ?`

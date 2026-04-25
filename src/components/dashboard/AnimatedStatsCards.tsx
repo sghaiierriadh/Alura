@@ -102,9 +102,9 @@ export function AnimatedStatsCards({
   knowledgeBoost,
   themeColor,
 }: Props) {
-  const conversationColor = `${themeColor}CC`;
-  const resolutionColor = `${themeColor}99`;
-  const knowledgeColor = `${themeColor}66`;
+  const conversationColor = "#3b82f6";
+  const resolutionColor = "#10b981";
+  const knowledgeColor = "#8b5cf6";
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       <GlassCard

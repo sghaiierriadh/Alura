@@ -10,6 +10,7 @@ type Props = {
   appUrl: string;
   initialChatbotName: string;
   initialThemeColor: string;
+  initialTextColor: string;
   initialWelcomeMessage: string;
   initialAvatarUrl: string | null;
 };
@@ -26,11 +27,13 @@ export function SettingsLookProForm({
   appUrl,
   initialChatbotName,
   initialThemeColor,
+  initialTextColor,
   initialWelcomeMessage,
   initialAvatarUrl,
 }: Props) {
   const [chatbotName, setChatbotName] = useState(initialChatbotName);
   const [themeColor, setThemeColor] = useState(normalizeHexColor(initialThemeColor));
+  const [textColor, setTextColor] = useState(normalizeHexColor(initialTextColor));
   const [welcomeMessage, setWelcomeMessage] = useState(initialWelcomeMessage);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
@@ -73,6 +76,7 @@ export function SettingsLookProForm({
             const fd = new FormData();
             fd.set("chatbot_name", chatbotName);
             fd.set("theme_color", themeColor);
+            fd.set("text_color", textColor);
             fd.set("welcome_message", welcomeMessage);
             if (avatarUrl) fd.set("previous_avatar_url", avatarUrl);
             if (avatarFile) fd.set("avatar", avatarFile);
@@ -83,13 +87,14 @@ export function SettingsLookProForm({
                 return;
               }
               setThemeColor(res.data.themeColor);
+              setTextColor(res.data.textColor);
               setAvatarUrl(res.data.avatarUrl);
               setAvatarFile(null);
               toast.success("Branding mis à jour.");
             });
           }}
         >
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
             <label className="space-y-1.5">
               <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                 Nom du chatbot
@@ -121,6 +126,25 @@ export function SettingsLookProForm({
                 />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Couleur du texte
+              </span>
+              <div className="flex items-center gap-3 rounded-xl border border-white/20 bg-white/30 px-3 py-2 dark:bg-zinc-900/40">
+                <input
+                  type="color"
+                  value={textColor}
+                  onChange={(e) => setTextColor(normalizeHexColor(e.target.value))}
+                  className="h-9 w-12 cursor-pointer rounded border-0 bg-transparent p-0"
+                />
+                <input
+                  value={textColor}
+                  onChange={(e) => setTextColor(normalizeHexColor(e.target.value))}
+                  className="w-full bg-transparent text-sm text-zinc-800 outline-none dark:text-zinc-100"
+                  placeholder="#FFFFFF"
+                />
+              </div>
+            </div>
           </div>
 
           <label className="space-y-1.5">
@@ -142,10 +166,10 @@ export function SettingsLookProForm({
               Avatar
             </span>
             <div className="flex items-center gap-4 rounded-xl border border-white/20 bg-white/30 p-3 dark:bg-zinc-900/40">
-              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-zinc-900/10">
+              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/25 bg-zinc-900/10">
                 {avatarPreview ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={avatarPreview} alt="Aperçu avatar" className="h-full w-full object-cover" />
+                  <img src={avatarPreview} alt="Aperçu avatar" className="h-full w-full rounded-full object-cover object-center" />
                 ) : (
                   <span className="text-xs text-zinc-500">Aucun</span>
                 )}
@@ -157,6 +181,9 @@ export function SettingsLookProForm({
                 className="block w-full text-sm text-zinc-700 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-zinc-800 dark:text-zinc-300 dark:file:bg-zinc-100 dark:file:text-zinc-900 dark:hover:file:bg-white"
               />
             </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Résolution recommandée : <strong>512x512 px</strong> (PNG/WEBP), logo centré, fond transparent.
+            </p>
           </div>
 
           <button

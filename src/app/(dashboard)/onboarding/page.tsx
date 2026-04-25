@@ -657,18 +657,23 @@ export default function OnboardingPage() {
   );
 
   return (
-    <section className="w-full bg-zinc-50 font-sans">
-      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
-        <header className="border-b border-zinc-200/70 pb-6">
+    <section className="w-full bg-background font-sans">
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+        <header className="border-b border-zinc-200/70 pb-6 dark:border-zinc-800/80">
           <p className="text-xl font-semibold tracking-tight text-zinc-900">
             Alura
           </p>
-          <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-zinc-400">
+          <p className="mt-1 text-xs font-medium uppercase tracking-[0.2em] text-zinc-400 dark:text-zinc-500">
             Onboarding
           </p>
+          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-zinc-200/80 bg-white/80 p-2 text-[11px] font-medium text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
+            <span className="rounded-lg bg-zinc-100 px-2 py-1 text-center dark:bg-zinc-800">1. Sources</span>
+            <span className="rounded-lg bg-zinc-100 px-2 py-1 text-center dark:bg-zinc-800">2. Profil</span>
+            <span className="rounded-lg bg-zinc-100 px-2 py-1 text-center dark:bg-zinc-800">3. Activation</span>
+          </div>
         </header>
 
-        <div className="mt-8 rounded-2xl border border-zinc-100 bg-white p-6 shadow-sm sm:p-8">
+        <div className="mt-8 rounded-3xl border border-white/20 bg-white/10 p-6 shadow-2xl backdrop-blur-md sm:p-8 dark:border-white/10 dark:bg-white/5">
           <div className="text-center sm:text-left">
             <h1 className="text-balance text-2xl font-medium tracking-tight text-zinc-900 sm:text-[1.65rem]">
               Bienvenue, créons votre conseiller Alura
@@ -737,8 +742,8 @@ export default function OnboardingPage() {
               </div>
             ) : (
               <>
-                <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-5">
-                  <div className="flex flex-col">
+                <div className="mt-4 grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 md:gap-5">
+                  <div className="flex h-full flex-col">
                     <div className="mb-2 flex items-center gap-2">
                       <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
                         Option A
@@ -748,7 +753,7 @@ export default function OnboardingPage() {
                       </span>
                     </div>
 
-                    <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+                    <div className="mb-3 min-h-[104px] rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
                       <p className="text-xs font-semibold text-indigo-900">
                         Nouveau : modèle FAQ Stratégique
                       </p>
@@ -820,7 +825,7 @@ export default function OnboardingPage() {
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
                         className={[
-                          "flex min-h-[168px] flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 transition-colors",
+                          "flex min-h-[210px] flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 transition-colors",
                           isDragging
                             ? "border-zinc-400 bg-zinc-50/90"
                             : "border-zinc-200/90 bg-zinc-50/30 hover:border-zinc-300 hover:bg-zinc-50/50",
@@ -846,7 +851,7 @@ export default function OnboardingPage() {
                     </p>
                   </div>
 
-                  <div className="relative flex flex-col">
+                  <div className="relative flex h-full flex-col">
                     <div className="mb-2 flex items-center gap-2">
                       <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
                         Option B
@@ -856,7 +861,7 @@ export default function OnboardingPage() {
                       </span>
                     </div>
                     <motion.div
-                      className="relative flex min-h-[168px] flex-col overflow-hidden rounded-xl bg-zinc-50/30 px-4 py-5"
+                      className="relative flex min-h-[210px] flex-1 flex-col overflow-hidden rounded-xl bg-zinc-50/30 px-4 py-5"
                       animate={
                         isAnalyzing && analysisKind === "url"
                           ? reduceMotion

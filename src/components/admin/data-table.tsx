@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export type DataTableColumn<T> = {
   id: string;
-  header: string;
+  header: ReactNode;
   headerClassName?: string;
   cellClassName?: string;
   cell: (row: T) => ReactNode;
@@ -31,7 +31,7 @@ export function DataTable<T>({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <table className="w-full min-w-[640px] table-fixed border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/60">
             {columns.map((col) => (

@@ -49,17 +49,20 @@ function chatLeadIdKey(agentId: string, sessionId: string) {
 function ChatMarkdown({
   content,
   role,
+  userTextColor,
 }: {
   content: string;
   role: "user" | "assistant";
+  userTextColor?: string;
 }) {
   return (
     <div
       className={
         role === "assistant"
           ? "prose prose-sm max-w-none prose-zinc dark:prose-invert [&_a]:break-words [&_a]:underline"
-          : "prose prose-sm max-w-none prose-zinc [&_a]:break-words [&_a]:underline"
+          : "prose prose-sm max-w-none prose-invert [&_a]:break-words [&_a]:underline"
       }
+      style={role === "user" ? { color: userTextColor } : undefined}
     >
       <ReactMarkdown>{content}</ReactMarkdown>
     </div>
@@ -84,6 +87,7 @@ type Props = {
   companyName: string;
   chatbotName?: string;
   themeColor?: string;
+  textColor?: string;
   welcomeMessage?: string | null;
   avatarUrl?: string | null;
   /** Widget / iframe : hauteur contrainte, scroll interne, pas de min-height dashboard. */
@@ -100,6 +104,7 @@ export function ChatPanel({
   companyName,
   chatbotName = "Alura",
   themeColor,
+  textColor,
   welcomeMessage,
   avatarUrl,
   layout = "default",
@@ -114,6 +119,7 @@ export function ChatPanel({
   const [visitorFirstName, setVisitorFirstName] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const primaryColor = getSafeThemeColor(themeColor);
+  const bubbleTextColor = getSafeThemeColor(textColor ?? "#FFFFFF");
 
   const leadFullyCaptured = Boolean(storedLeadId?.trim());
 
@@ -488,10 +494,10 @@ export function ChatPanel({
             <img
               src={avatarUrl}
               alt={`${chatbotName} avatar`}
-              className="h-7 w-7 rounded-full border border-zinc-700 object-cover"
+              className="h-10 w-10 rounded-full border border-zinc-700 object-cover object-center"
             />
           ) : (
-            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-[10px] font-semibold text-zinc-300">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-xs font-semibold text-zinc-300">
               {chatbotName.slice(0, 1).toUpperCase()}
             </div>
           )}
@@ -528,6 +534,7 @@ export function ChatPanel({
             isStreaming &&
             isLast &&
             !m.content.trim();
+          const showReadReceipt = m.role === "user" && !isStreaming && isLast;
 
           return (
             <motion.div
@@ -543,16 +550,39 @@ export function ChatPanel({
                     ? "max-w-[86%] rounded-3xl rounded-br-lg px-4 py-2.5 text-sm leading-relaxed text-white shadow-md"
                     : "max-w-[86%] rounded-3xl rounded-bl-lg border border-zinc-800/90 bg-zinc-900/60 px-4 py-2.5 text-sm leading-relaxed text-zinc-100 shadow-md"
                 }
-                style={m.role === "user" ? { backgroundColor: primaryColor } : undefined}
+                style={
+                  m.role === "user"
+                    ? { backgroundColor: primaryColor, color: bubbleTextColor }
+                    : undefined
+                }
               >
-                <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                <span
+                  className={`mb-1 block text-[10px] uppercase tracking-wide ${
+                    m.role === "user"
+                      ? "font-medium"
+                      : "font-medium text-zinc-400"
+                  }`}
+                  style={m.role === "user" ? { color: bubbleTextColor } : undefined}
+                >
                   {m.role === "user" ? "Vous" : "Alura"}
                 </span>
                 {showTypingDot ? (
                   <TypingIndicator />
                 ) : (
-                  <ChatMarkdown content={m.content} role={m.role} />
+                  <ChatMarkdown
+                    content={m.content}
+                    role={m.role}
+                    userTextColor={bubbleTextColor}
+                  />
                 )}
+                {showReadReceipt ? (
+                  <span
+                    className="mt-1 block text-[10px]"
+                    style={{ color: bubbleTextColor }}
+                  >
+                    Lu
+                  </span>
+                ) : null}
               </div>
             </motion.div>
           );

@@ -16,6 +16,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import { ThemeToggle } from "@/components/theme-toggle";
 import { createClient } from "@/lib/supabase/client";
 
 const mainNav = [
@@ -97,9 +98,9 @@ function SidebarLogout({ compact }: { compact?: boolean }) {
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-full flex-1 flex-col lg:flex-row">
-      <aside className="hidden shrink-0 border-b border-zinc-200 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-950 lg:block lg:w-56 lg:border-b-0 lg:border-r">
-        <div className="sticky top-0 flex h-full min-h-0 flex-col gap-6 px-3 py-6">
+    <div className="flex min-h-full flex-1 flex-col bg-background text-foreground lg:flex-row">
+      <aside className="hidden shrink-0 border-b border-zinc-200 bg-zinc-50/80 dark:border-zinc-800 dark:bg-zinc-950 lg:block lg:w-60 lg:border-b-0 lg:border-r">
+        <div className="sticky top-0 flex h-screen min-h-0 flex-col gap-6 px-3 py-6">
           <div className="px-2">
             <div className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/80 bg-white px-2.5 py-1.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-zinc-900 text-[10px] font-bold text-white dark:bg-zinc-100 dark:text-zinc-900">
@@ -144,13 +145,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col bg-zinc-50/50 dark:bg-zinc-950">
+      <div className="flex min-w-0 flex-1 flex-col bg-background">
         <header className="border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
             <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
               Alura
             </span>
             <div className="flex items-center gap-3">
+              <ThemeToggle />
               <span className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
                 Espace client
               </span>

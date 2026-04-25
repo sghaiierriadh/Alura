@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Database } from "@/types/database.types";
-import { CalendarRange, MessageCircle, RotateCcw } from "lucide-react";
+import { CalendarRange, MessageCircle, RotateCcw, Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -217,15 +217,16 @@ export function LeadsTableClient({ leads }: { leads: LeadRow[] }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Rechercher par nom, email, téléphone…"
-            className="h-9"
+            className="h-9 pl-9"
           />
+          <Search className="pointer-events-none relative -mt-8 ml-3 h-4 w-4 text-zinc-400" aria-hidden />
         </div>
         <div className="w-full min-w-[180px] space-y-1.5 lg:w-48">
           <label className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Source
           </label>
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-8 text-xs">
               <SelectValue placeholder="Toutes" />
             </SelectTrigger>
             <SelectContent>

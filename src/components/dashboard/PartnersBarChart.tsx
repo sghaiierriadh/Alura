@@ -5,6 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -52,6 +53,15 @@ function CustomTooltip({
 }
 
 export function PartnersBarChart({ data, themeColor }: Props) {
+  const palette = [
+    "#8b5cf6",
+    "#06b6d4",
+    "#f59e0b",
+    "#22c55e",
+    "#ec4899",
+  ];
+  const fallbackBarColor = hexToRgba(themeColor, 0.82);
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 12 }}
@@ -93,9 +103,13 @@ export function PartnersBarChart({ data, themeColor }: Props) {
               <Tooltip content={<CustomTooltip />} cursor={{ fill: "#ffffff10" }} />
               <Bar
                 dataKey="count"
-                fill={hexToRgba(themeColor, 0.9)}
+                fill={fallbackBarColor}
                 radius={[0, 8, 8, 0]}
-              />
+              >
+                {data.map((item, idx) => (
+                  <Cell key={`${item.partner}-${idx}`} fill={palette[idx % palette.length]} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         )}

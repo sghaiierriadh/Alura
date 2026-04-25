@@ -11,7 +11,7 @@ const PROTECTED_PREFIXES = [
   "/admin",
 ];
 
-const AUTH_ONLY_PREFIXES = ["/login", "/signup"];
+const AUTH_ONLY_PREFIXES = ["/login", "/signup", "/auth/login", "/auth/signup"];
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -48,7 +48,7 @@ export async function middleware(request: NextRequest) {
 
   if (isProtectedPath(pathname) && !user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/auth/login";
     url.searchParams.set(
       "redirect",
       `${pathname}${request.nextUrl.search}`,

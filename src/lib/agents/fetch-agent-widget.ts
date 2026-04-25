@@ -10,6 +10,7 @@ export type AgentWidgetRow = Pick<
 > & {
   chatbot_name: string | null;
   theme_color: string | null;
+  text_color: string | null;
   welcome_message: string | null;
   avatar_url: string | null;
 };
@@ -46,6 +47,7 @@ export async function fetchAgentForWidget(
     company_name: typeof row.company_name === "string" ? row.company_name : null,
     chatbot_name: typeof row.chatbot_name === "string" ? row.chatbot_name : null,
     theme_color: typeof row.theme_color === "string" ? row.theme_color : null,
+    text_color: typeof row.text_color === "string" ? row.text_color : null,
     welcome_message:
       typeof row.welcome_message === "string" ? row.welcome_message : null,
     avatar_url: typeof row.avatar_url === "string" ? row.avatar_url : null,

@@ -61,6 +61,7 @@ export default async function WidgetPage({ searchParams }: PageProps) {
         companyName={agent.company_name?.trim() || "Votre partenaire"}
         chatbotName={agent.chatbot_name?.trim() || "Alura"}
         themeColor={agent.theme_color?.trim() || "#18181b"}
+        textColor={agent.text_color?.trim() || "#ffffff"}
         welcomeMessage={agent.welcome_message?.trim() || null}
         avatarUrl={agent.avatar_url?.trim() || null}
         layout="embedded"

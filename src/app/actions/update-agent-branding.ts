@@ -10,6 +10,7 @@ export type UpdateAgentBrandingResult =
       data: {
         chatbotName: string;
         themeColor: string;
+        textColor: string;
         welcomeMessage: string;
         avatarUrl: string | null;
       };
@@ -41,6 +42,9 @@ export async function updateAgentBranding(
   const welcomeMessage = String(formData.get("welcome_message") ?? "").trim();
   const themeColor = normalizeHexColor(
     String(formData.get("theme_color") ?? "").trim(),
+  );
+  const textColor = normalizeHexColor(
+    String(formData.get("text_color") ?? "").trim(),
   );
   const previousAvatarUrlRaw = String(formData.get("previous_avatar_url") ?? "").trim();
 
@@ -99,15 +103,32 @@ export async function updateAgentBranding(
   const payload = {
     chatbot_name: chatbotName,
     theme_color: themeColor,
+    text_color: textColor,
     welcome_message: welcomeMessage,
     avatar_url: avatarUrl,
   };
 
-  const { error: updateErr } = await supabase
+  let { error: updateErr } = await supabase
     .from("agents")
     .update(payload as never)
     .eq("id", agentRow.id)
     .eq("user_id", user.id);
+
+  // Compatibilité schéma : si la colonne text_color n'existe pas encore, on retente sans ce champ.
+  if (updateErr?.message?.toLowerCase().includes("text_color")) {
+    const fallbackPayload = {
+      chatbot_name: chatbotName,
+      theme_color: themeColor,
+      welcome_message: welcomeMessage,
+      avatar_url: avatarUrl,
+    };
+    const retry = await supabase
+      .from("agents")
+      .update(fallbackPayload as never)
+      .eq("id", agentRow.id)
+      .eq("user_id", user.id);
+    updateErr = retry.error;
+  }
 
   if (updateErr) {
     return { ok: false, error: updateErr.message };
@@ -122,6 +143,7 @@ export async function updateAgentBranding(
     data: {
       chatbotName,
       themeColor,
+      textColor,
       welcomeMessage,
       avatarUrl,
     },
