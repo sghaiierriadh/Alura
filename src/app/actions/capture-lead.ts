@@ -254,7 +254,12 @@ async function updateExistingLead(
     email: payload.email || existing.email,
     phone: payload.phone || existing.phone,
     session_id: payload.sessionIdChat || existing.session_id,
-    source: payload.leadSource || existing.source || "widget",
+    source: (payload.leadSource || existing.source || "widget") as
+      | "widget"
+      | "embed"
+      | "dashboard"
+      | "api"
+      | "unknown",
     last_question: mergedQuestion,
   };
   const { error } = await client.from("leads").update(updatePayload).eq("id", leadId);
@@ -315,7 +320,12 @@ async function upsertLeadBySession(
       full_name: payload.fullName,
       last_question: payload.lastQuestion,
       session_id: payload.sessionIdChat,
-      source: payload.leadSource,
+      source: (payload.leadSource || "widget") as
+        | "widget"
+        | "embed"
+        | "dashboard"
+        | "api"
+        | "unknown",
     })
     .select("id")
     .single();
