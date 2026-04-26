@@ -14,9 +14,18 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/**
+ * Titres par page : exporter `metadata` depuis chaque `page.tsx` / `layout.tsx`
+ * segment avec au minimum `title: "Nom de la page"` — le template ajoute « | Alura ».
+ * Exemple dashboard : `export const metadata = { title: "Tableau de bord" };` → « Tableau de bord | Alura ».
+ */
 export const metadata: Metadata = {
-  title: "Alura",
-  description: "Conseiller client Alura",
+  title: {
+    default: "Alura | Votre Assistant IA Clientèle",
+    template: "%s | Alura",
+  },
+  description:
+    "Automatisez votre support client avec l'IA de Pixelynks.",
 };
 
 export default function RootLayout({

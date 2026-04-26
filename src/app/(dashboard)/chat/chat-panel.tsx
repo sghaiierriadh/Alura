@@ -71,12 +71,12 @@ function ChatMarkdown({
 
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-2 text-xs text-zinc-400">
+    <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
       <span>Alura est en train d&apos;écrire</span>
       <span className="flex items-center gap-1">
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:0ms]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:120ms]" />
-        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:240ms]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 dark:bg-zinc-400 [animation-delay:0ms]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 dark:bg-zinc-400 [animation-delay:120ms]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500 dark:bg-zinc-400 [animation-delay:240ms]" />
       </span>
     </div>
   );
@@ -471,21 +471,21 @@ export function ChatPanel({
     <div
       className={
         isEmbedded
-          ? "flex h-full min-h-0 w-full max-h-full flex-1 flex-col overflow-hidden bg-zinc-950"
-          : "flex min-h-[min(720px,calc(100vh-8rem))] flex-col overflow-hidden rounded-2xl bg-zinc-950 shadow-xl ring-1 ring-zinc-800/80"
+          ? "flex h-full min-h-0 w-full max-h-full flex-1 flex-col overflow-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100"
+          : "flex min-h-[min(720px,calc(100vh-8rem))] flex-col overflow-hidden rounded-2xl bg-white text-zinc-900 shadow-xl ring-1 ring-zinc-200/90 dark:bg-zinc-950 dark:text-zinc-100 dark:ring-zinc-800/80"
       }
     >
       <header
         className={
           isEmbedded
-            ? "shrink-0 border-b border-zinc-800/90 px-3 py-3"
-            : "shrink-0 border-b border-zinc-800/90 px-5 py-4"
+            ? "shrink-0 border-b border-zinc-200 px-3 py-3 dark:border-zinc-800/90"
+            : "shrink-0 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800/90"
         }
       >
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
           Conversation
         </p>
-        <h1 className="mt-1 text-lg font-semibold tracking-tight text-zinc-50">
+        <h1 className="mt-1 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           {chatbotName}
         </h1>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -494,20 +494,20 @@ export function ChatPanel({
             <img
               src={avatarUrl}
               alt={`${chatbotName} avatar`}
-              className="h-10 w-10 rounded-full border border-zinc-700 object-cover object-center"
+              className="h-10 w-10 rounded-full border border-zinc-200 object-cover object-center dark:border-zinc-700"
             />
           ) : (
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-xs font-semibold text-zinc-300">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
               {chatbotName.slice(0, 1).toUpperCase()}
             </div>
           )}
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
             {companyName} - assistant alimente par votre base de connaissance.
           </p>
           <button
             type="button"
             onClick={startNewSession}
-            className="text-xs text-zinc-500 underline decoration-zinc-600 underline-offset-2 transition hover:text-zinc-400"
+            className="text-xs text-zinc-600 underline decoration-zinc-400 underline-offset-2 transition hover:text-zinc-900 dark:text-zinc-400 dark:decoration-zinc-500 dark:hover:text-zinc-200"
           >
             Nouvelle session
           </button>
@@ -523,7 +523,7 @@ export function ChatPanel({
         }
       >
         {messages.length === 0 ? (
-          <p className="text-center text-sm text-zinc-500">
+          <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
             Posez une question pour commencer.
           </p>
         ) : null}
@@ -548,7 +548,7 @@ export function ChatPanel({
                 className={
                   m.role === "user"
                     ? "max-w-[86%] rounded-3xl rounded-br-lg px-4 py-2.5 text-sm leading-relaxed text-white shadow-md"
-                    : "max-w-[86%] rounded-3xl rounded-bl-lg border border-zinc-800/90 bg-zinc-900/60 px-4 py-2.5 text-sm leading-relaxed text-zinc-100 shadow-md"
+                    : "max-w-[86%] rounded-3xl rounded-bl-lg border border-zinc-200 bg-zinc-100 px-4 py-2.5 text-sm leading-relaxed text-zinc-900 shadow-md dark:border-zinc-800/90 dark:bg-zinc-900/70 dark:text-zinc-100"
                 }
                 style={
                   m.role === "user"
@@ -560,7 +560,7 @@ export function ChatPanel({
                   className={`mb-1 block text-[10px] uppercase tracking-wide ${
                     m.role === "user"
                       ? "font-medium"
-                      : "font-medium text-zinc-400"
+                      : "font-medium text-zinc-500 dark:text-zinc-400"
                   }`}
                   style={m.role === "user" ? { color: bubbleTextColor } : undefined}
                 >
@@ -615,11 +615,11 @@ export function ChatPanel({
       <div
         className={
           isEmbedded
-            ? "shrink-0 border-t border-zinc-800/90 bg-zinc-950 p-3"
-            : "shrink-0 border-t border-zinc-800/90 p-4 sm:p-5"
+            ? "shrink-0 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800/90 dark:bg-zinc-950"
+            : "shrink-0 border-t border-zinc-200 bg-white p-4 sm:p-5 dark:border-zinc-800/90 dark:bg-zinc-950"
         }
       >
-        <div className="flex items-end gap-2 rounded-xl bg-zinc-900/80 p-2 ring-1 ring-zinc-800/80 focus-within:ring-zinc-600/50">
+        <div className="flex items-end gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-2 ring-zinc-200/80 focus-within:ring-2 focus-within:ring-zinc-300/50 dark:border-zinc-800 dark:bg-zinc-900/80 dark:ring-zinc-800/80 dark:focus-within:ring-zinc-600/40">
           <textarea
             rows={1}
             value={input}
@@ -627,7 +627,7 @@ export function ChatPanel({
             onKeyDown={onKeyDown}
             placeholder="Votre message…"
             disabled={isStreaming}
-            className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-zinc-100 placeholder:text-zinc-600 focus:outline-none disabled:opacity-50 sm:text-sm"
+            className="max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-zinc-900 placeholder:text-zinc-500 focus:outline-none disabled:opacity-50 sm:text-sm dark:text-zinc-100 dark:placeholder:text-zinc-400"
           />
           <button
             type="button"

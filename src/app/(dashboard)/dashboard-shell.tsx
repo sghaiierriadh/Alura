@@ -7,10 +7,11 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Rocket,
   Settings,
-  Sparkles,
   Ticket,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,13 +26,6 @@ const mainNav = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/admin/leads", label: "Leads", icon: Users },
   { href: "/admin/tickets", label: "Tickets", icon: Ticket },
-] as const;
-
-const secondaryNav = [
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/knowledge", label: "Connaissance", icon: BookOpen },
-  { href: "/onboarding", label: "Onboarding", icon: Sparkles },
-  { href: "/settings", label: "Paramètres", icon: Settings },
 ] as const;
 
 function NavLink({
@@ -98,8 +92,27 @@ function SidebarLogout({ compact }: { compact?: boolean }) {
   );
 }
 
-export function DashboardShell({ children }: { children: ReactNode }) {
+type NavItem = { href: string; label: string; icon: LucideIcon };
+
+export function DashboardShell({
+  children,
+  agentConfigured,
+}: {
+  children: ReactNode;
+  agentConfigured: boolean;
+}) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const secondaryNav: NavItem[] = [
+    { href: "/chat", label: "Chat", icon: MessageSquare },
+    { href: "/knowledge", label: "Connaissance", icon: BookOpen },
+    {
+      href: "/onboarding",
+      label: agentConfigured ? "Sources & Identité" : "Mise en route",
+      icon: agentConfigured ? Wrench : Rocket,
+    },
+    { href: "/settings", label: "Paramètres", icon: Settings },
+  ];
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-background text-foreground lg:flex-row">
