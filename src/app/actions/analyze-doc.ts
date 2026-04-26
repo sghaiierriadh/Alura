@@ -1,9 +1,8 @@
 "use server";
 
-import "@/lib/shims/dommatrix-pdf-shim";
 import { GoogleGenerativeAI, type GenerateContentResult } from "@google/generative-ai";
 import mammoth from "mammoth";
-import { PDFParse } from "pdf-parse";
+import pdfParse from "pdf-parse-fork";
 
 import {
   parsePillarsFromText,
@@ -167,13 +166,8 @@ function detectKind(file: File): SupportedKind | null {
 
 async function extractTextFromPdf(file: File): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
-  const parser = new PDFParse({ data: buffer });
-  try {
-    const textResult = await parser.getText();
-    return (textResult.text ?? "").trim();
-  } finally {
-    await parser.destroy();
-  }
+  const { text } = await pdfParse(buffer);
+  return (text ?? "").trim();
 }
 
 async function extractTextFromDocx(file: File): Promise<string> {
