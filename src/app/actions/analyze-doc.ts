@@ -1,5 +1,6 @@
 "use server";
 
+import "@/lib/shims/dommatrix-pdf-shim";
 import { GoogleGenerativeAI, type GenerateContentResult } from "@google/generative-ai";
 import mammoth from "mammoth";
 import { PDFParse } from "pdf-parse";
