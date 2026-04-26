@@ -6,12 +6,16 @@ import { getAdminReadContext } from "@/lib/admin/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { embedTextGemini, vectorToPgString } from "@/lib/ai/gemini-embedding-rest";
 import type { CuratedFact } from "@/lib/ingestion/website-scraper";
+import type { Database } from "@/types/database.types";
+
+type KnowledgeSource = Database["public"]["Enums"]["knowledge_source"];
+type KnowledgeInsert = Database["public"]["Tables"]["knowledge"]["Insert"];
 
 export type SaveWebsiteKnowledgeResult =
   | { ok: true; inserted: number; agentId: string }
   | { ok: false; error: string };
 
-const SOURCE = "website_scraping";
+const SOURCE: KnowledgeSource = "website_scraping";
 
 /**
  * Indexe une liste de faits curés (issus du scraping web) dans `public.knowledge`
@@ -74,14 +78,7 @@ export async function saveWebsiteKnowledge(
     return { ok: false, error: delErr.message };
   }
 
-  const rows: Array<{
-    agent_id: string;
-    user_id: string;
-    question: string;
-    answer: string;
-    source: string;
-    embedding: string;
-  }> = [];
+  const rows: KnowledgeInsert[] = [];
 
   for (const f of blocks) {
     const topic = f.topic.trim();

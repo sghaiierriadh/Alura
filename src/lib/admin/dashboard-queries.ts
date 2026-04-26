@@ -8,6 +8,53 @@ export type TicketWithLead = ComplaintRow & {
   leads: Pick<LeadRow, "id" | "full_name" | "email" | "phone" | "agent_id" | "source"> | null;
 };
 
+type LeadSource = Database["public"]["Enums"]["lead_source"];
+type ComplaintStatus = Database["public"]["Enums"]["complaint_status"];
+type ComplaintPriority = Database["public"]["Enums"]["complaint_priority"];
+
+const LEAD_SOURCE_LIST: readonly LeadSource[] = [
+  "widget",
+  "embed",
+  "dashboard",
+  "api",
+  "unknown",
+] as const;
+
+const COMPLAINT_STATUS_LIST: readonly ComplaintStatus[] = [
+  "open",
+  "in_progress",
+  "resolved",
+] as const;
+
+const COMPLAINT_PRIORITY_LIST: readonly ComplaintPriority[] = [
+  "low",
+  "normal",
+  "high",
+] as const;
+
+function coerceLeadSource(raw: string | null | undefined): LeadSource {
+  const t = raw?.trim() ?? "";
+  return (LEAD_SOURCE_LIST as readonly string[]).includes(t)
+    ? (t as LeadSource)
+    : "unknown";
+}
+
+function coerceComplaintStatus(raw: string | null | undefined): ComplaintStatus {
+  const t = raw?.trim() ?? "";
+  return (COMPLAINT_STATUS_LIST as readonly string[]).includes(t)
+    ? (t as ComplaintStatus)
+    : "open";
+}
+
+function coerceComplaintPriority(
+  raw: string | null | undefined,
+): ComplaintPriority {
+  const t = raw?.trim() ?? "";
+  return (COMPLAINT_PRIORITY_LIST as readonly string[]).includes(t)
+    ? (t as ComplaintPriority)
+    : "normal";
+}
+
 function getServiceRoleClient(): SupabaseClient<Database> | null {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -34,27 +81,28 @@ function safeMetadata(raw: unknown): Json {
 }
 
 function normalizeLeadSourceRow(row: LeadRow): LeadRow {
-  const src = row.source?.trim();
   return {
     ...row,
-    source: src && src.length > 0 ? src : "unknown",
+    source: coerceLeadSource(row.source),
   };
 }
 
 function normalizeTicketRow(row: TicketWithLead): TicketWithLead {
-  const pr = row.priority?.trim();
-  const st = row.status?.trim();
   const notes = row.resolution_notes;
   return {
     ...row,
-    status: st && st.length > 0 ? st : "open",
-    priority: pr && pr.length > 0 ? pr : "normal",
+    status: coerceComplaintStatus(
+      row.status == null ? undefined : String(row.status),
+    ),
+    priority: coerceComplaintPriority(
+      row.priority == null ? undefined : String(row.priority),
+    ),
     resolution_notes: notes ?? null,
     metadata: safeMetadata(row.metadata),
     leads: row.leads
       ? {
           ...row.leads,
-          source: row.leads.source?.trim() || "unknown",
+          source: coerceLeadSource(row.leads.source),
         }
       : null,
   };
@@ -206,23 +254,22 @@ async function fetchTicketsWithClient(
   const byId = new Map((leadsData ?? []).map((l) => [l.id, l]));
 
   return flat.map((c) => {
-    const status =
-      typeof c.status === "string" && c.status.length > 0 ? c.status : "open";
     const leadRaw = byId.get(c.lead_id) ?? null;
     const lead = leadRaw
       ? {
           ...leadRaw,
-          source: leadRaw.source?.trim() || "unknown",
+          source: coerceLeadSource(leadRaw.source),
         }
       : null;
     return normalizeTicketRow({
       ...c,
-      status,
+      status: coerceComplaintStatus(
+        c.status == null ? undefined : String(c.status),
+      ),
       resolution_notes: c.resolution_notes ?? null,
-      priority:
-        typeof c.priority === "string" && c.priority.trim().length > 0
-          ? c.priority.trim()
-          : "normal",
+      priority: coerceComplaintPriority(
+        typeof c.priority === "string" ? c.priority : undefined,
+      ),
       metadata: safeMetadata((c as { metadata?: unknown }).metadata),
       leads: lead,
     } as TicketWithLead);

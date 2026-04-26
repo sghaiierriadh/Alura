@@ -6,12 +6,16 @@ import { getAdminReadContext } from "@/lib/admin/server-context";
 import { createClient } from "@/lib/supabase/server";
 import { embedTextGemini, vectorToPgString } from "@/lib/ai/gemini-embedding-rest";
 import type { PillarBlock } from "@/lib/knowledge/parse-pillars";
+import type { Database } from "@/types/database.types";
 
 export type SaveTemplateKnowledgeResult =
   | { ok: true; inserted: number; agentId: string }
   | { ok: false; error: string };
 
-const DEFAULT_SOURCE = "template_upload";
+type KnowledgeSource = Database["public"]["Enums"]["knowledge_source"];
+type KnowledgeInsert = Database["public"]["Tables"]["knowledge"]["Insert"];
+
+const DEFAULT_SOURCE: KnowledgeSource = "template_upload";
 
 /**
  * Persiste chaque bloc « Pilier » comme une entrée `knowledge` liée à l'agent
@@ -26,7 +30,7 @@ const DEFAULT_SOURCE = "template_upload";
  */
 export async function saveTemplateKnowledge(
   piliers: PillarBlock[],
-  knowledgeSource: string = DEFAULT_SOURCE,
+  knowledgeSource: KnowledgeSource = DEFAULT_SOURCE,
 ): Promise<SaveTemplateKnowledgeResult> {
   const blocks = (piliers ?? []).filter(
     (p) => p && typeof p.content === "string" && p.content.trim().length > 20,
@@ -75,14 +79,7 @@ export async function saveTemplateKnowledge(
     return { ok: false, error: delErr.message };
   }
 
-  const rows: Array<{
-    agent_id: string;
-    user_id: string;
-    question: string;
-    answer: string;
-    source: string;
-    embedding: string;
-  }> = [];
+  const rows: KnowledgeInsert[] = [];
 
   for (const p of blocks) {
     const question = `PILIER ${p.index}${p.title ? ` : ${p.title}` : ""}`;
